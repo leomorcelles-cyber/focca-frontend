@@ -1,65 +1,111 @@
-import Image from "next/image";
+﻿"use client"
+import { useEffect, useState } from "react"
+import { api } from "@/lib/api"
 
 export default function Home() {
+  const [kpis, setKpis] = useState<any>({})
+  const [marcas, setMarcas] = useState<any[]>([])
+  const [lojas, setLojas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([api.kpis(), api.marcas(), api.kpisLojas()])
+      .then(([k, m, l]) => { setKpis(k); setMarcas(m); setLojas(l); setLoading(false) })
+  }, [])
+
+  const fmt  = (n: number) => n?.toLocaleString("pt-BR") ?? "0"
+  const fmtR = (n: number) => `R$ ${n?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) ?? "0,00"}`
+
+  if (loading) return <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>Carregando...</div>
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
+      <div style={{ marginBottom: "24px" }}>
+        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
+        <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Consolidado de todas as lojas</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: "10px", marginBottom: "24px" }}>
+        {[
+          { l: "Valor em Estoque", v: fmtR(kpis.valor_total_estoque), c: "var(--primary)" },
+          { l: "Peças",            v: fmt(kpis.pecas_em_estoque),      c: "var(--success)" },
+          { l: "Margem Média",     v: `${kpis.margem_media_pct}%`,     c: "var(--warning)" },
+          { l: "Em Atenção",       v: fmt(kpis.total_criticos),         c: "var(--orange)" },
+          { l: "SKUs OK",          v: fmt(kpis.total_ok),               c: "var(--success)" },
+          { l: "Marcas",           v: kpis.total_marcas },
+          { l: "Coleções",         v: kpis.total_colecoes },
+          { l: "Modelos",          v: kpis.total_modelos },
+        ].map((k, i) => (
+          <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{k.l}</div>
+            <div style={{ fontSize: "clamp(16px,2vw,22px)", fontWeight: 700, color: k.c || "var(--text)", marginTop: "4px", lineHeight: 1.2 }}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", marginBottom: "20px" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>Top 10 Marcas por Valor em Estoque</h2>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div style={{ padding: "16px", overflowX: "auto" }}>
+          {marcas.slice(0, 10).map((m: any, i: number) => {
+            const max = marcas[0]?.valor_estoque_total || 1
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                <div style={{ fontSize: "12px", color: "var(--muted)", width: "20px", textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.marca}</span>
+                    <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: 700, whiteSpace: "nowrap", marginLeft: "8px" }}>
+                      R$ {Number(m.valor_estoque_total).toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div style={{ background: "var(--surface2)", borderRadius: "4px", height: "6px" }}>
+                    <div style={{ background: "var(--primary)", borderRadius: "4px", height: "6px", width: `${(m.valor_estoque_total / max) * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </main>
+      </div>
+
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>Resumo por Loja</h2>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
+                {["Loja","SKUs","Peças","Valor Estoque","Margem","% Zerados"].map(h => (
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: "var(--muted)", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lojas.map((l: any, i: number) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "12px 14px" }}>
+                    <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.nome_loja}</div>
+                    <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>
+                  </td>
+                  <td style={{ padding: "12px 14px" }}>{fmt(l.total_skus)}</td>
+                  <td style={{ padding: "12px 14px" }}>{fmt(l.total_pecas)}</td>
+                  <td style={{ padding: "12px 14px", color: "var(--primary)", fontWeight: 600 }}>{fmtR(l.valor_estoque)}</td>
+                  <td style={{ padding: "12px 14px", color: l.margem_media_pct > 0 ? "var(--success)" : "var(--danger)", fontWeight: 500 }}>{l.margem_media_pct}%</td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <span style={{ padding: "3px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: 600,
+                      background: l.pct_zerados > 10 ? "var(--danger-light)" : "var(--success-light)",
+                      color: l.pct_zerados > 10 ? "var(--danger)" : "var(--success)",
+                    }}>{l.pct_zerados}%</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
