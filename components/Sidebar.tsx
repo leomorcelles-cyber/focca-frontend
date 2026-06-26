@@ -98,7 +98,7 @@ export default function Sidebar() {
 
       <div style={{ padding: "12px 8px", borderTop: "1px solid var(--border)" }}>
         <button
-          onClick={() => toggleTheme(theme === "light" ? "dark" : "light")}
+          onClick={() => toggleTheme()}
           style={{
             width: "100%",
             padding: "8px 10px",
