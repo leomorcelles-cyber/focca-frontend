@@ -1,21 +1,21 @@
-"use client"
+﻿"use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "@/components/ThemeProvider"
 import { useState } from "react"
 
 const nav = [
-  { href: "/",               label: "Visão Geral",       icon: "◈" },
-  { href: "/estoque",        label: "Estoque por Loja",  icon: "⊞" },
-  { href: "/compras",        label: "Compras",           icon: "↓" },
-  { href: "/transferencias", label: "Transferências",    icon: "⇄" },
-  { href: "/analise",        label: "Análise de Vendas", icon: "↗" },
+  { href: "/",               label: "VisÃ£o Geral",       icon: "â—ˆ" },
+  { href: "/estoque",        label: "Estoque por Loja",  icon: "âŠž" },
+  { href: "/compras",        label: "Compras",           icon: "â†“" },
+  { href: "/transferencias", label: "TransferÃªncias",    icon: "â‡„" },
+  { href: "/analise",        label: "AnÃ¡lise de Vendas", icon: "â†—" },
   { href: "/margem",         label: "Margem",            icon: "%" },
 ]
 
 export default function Sidebar() {
   const path = usePathname()
-  const { theme, setTheme } = useTheme()
+  const { theme, toggleTheme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -57,7 +57,7 @@ export default function Sidebar() {
             flexShrink: 0,
           }}
         >
-          {collapsed ? "→" : "←"}
+          {collapsed ? "â†’" : "â†"}
         </button>
       </div>
 
@@ -98,7 +98,7 @@ export default function Sidebar() {
 
       <div style={{ padding: "12px 8px", borderTop: "1px solid var(--border)" }}>
         <button
-          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+          onClick={() => toggleTheme(theme === "light" ? "dark" : "light")}
           style={{
             width: "100%",
             padding: "8px 10px",
@@ -113,7 +113,7 @@ export default function Sidebar() {
             gap: "8px",
           }}
         >
-          <span>{theme === "light" ? "🌙" : "☀️"}</span>
+          <span>{theme === "light" ? "ðŸŒ™" : "â˜€ï¸"}</span>
           {!collapsed && <span>{theme === "light" ? "Modo escuro" : "Modo claro"}</span>}
         </button>
       </div>
