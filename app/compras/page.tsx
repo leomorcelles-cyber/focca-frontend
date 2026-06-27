@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -12,10 +12,9 @@ const LOJAS = [
   { id: 7, nome: "Hype",     key: "focca_hype" },
 ]
 
+const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEMININO CURVES"]
 const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
-
-const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEMININO CURVES"]
 
 const STATUS_OPTS = [
   { key: "ZERADO",   label: "Zerado",   cor: "var(--danger)"  },
@@ -42,15 +41,17 @@ function corCelula(v: number) {
   return { bg: "transparent", color: "var(--text)", fw: 400 }
 }
 
-function Chip({ label, ativo, onClick }: { label: string, ativo: boolean, onClick: () => void }) {
+function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
   return (
     <button onClick={onClick} style={{
-      padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
-      fontWeight: ativo ? 600 : 400, border: "1px solid",
+      padding: small ? "3px 10px" : "5px 12px",
+      borderRadius: "20px", fontSize: small ? "11px" : "12px",
+      cursor: "pointer", fontWeight: ativo ? 600 : 400,
+      border: "1px solid",
       background: ativo ? "var(--primary)" : "var(--surface2)",
       color: ativo ? "#fff" : "var(--text)",
       borderColor: ativo ? "var(--primary)" : "var(--border)",
-      whiteSpace: "nowrap" as const, transition: "all 0.1s",
+      transition: "all 0.1s", whiteSpace: "nowrap" as const,
     }}>{label}</button>
   )
 }
@@ -63,18 +64,103 @@ const thCell = {
   borderBottom: "2px solid var(--border)" as const,
 }
 
-export default function ComprasPage() {
-  const [marcaBusca, setMarcaBusca]   = useState("")
-  const [modeloBusca, setModeloBusca] = useState("")
-  const [sexosSel, setSexosSel]       = useState<string[]>([])
-  const [lojasSel, setLojasSel]       = useState<number[]>([])
-  const [anoBusca, setAnoBusca]       = useState("")
-  const [statusFiltro, setStatusFiltro] = useState<string[]>([])
+const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
+const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "200px", display: "block" as const }
 
-  const [dados, setDados]           = useState<any[]>([])
-  const [loading, setLoading]       = useState(false)
+export default function ComprasPage() {
+  const [lojasSel,    setLojasSel]    = useState<number[]>([])
+  const [sexosSel,    setSexosSel]    = useState<string[]>([])
+  const [modelosSel,  setModelosSel]  = useState<string[]>([])
+  const [marcasSel,   setMarcasSel]   = useState<string[]>([])
+  const [anosSel,     setAnosSel]     = useState<string[]>([])
+  const [estacoesSel, setEstacoesSel] = useState<string[]>([])
+  const [colecoesSel, setColecoesSel] = useState<string[]>([])
+  const [statusFiltro,setStatusFiltro]= useState<string[]>([])
+
+  const [buscaModelo,  setBuscaModelo]  = useState("")
+  const [buscaMarca,   setBuscaMarca]   = useState("")
+  const [buscaColecao, setBuscaColecao] = useState("")
+
+  const [opModelos, setOpModelos] = useState<string[]>([])
+  const [opMarcas,  setOpMarcas]  = useState<string[]>([])
+  const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
+  const [opAnos,    setOpAnos]    = useState<string[]>([])
+
+  const [dados,      setDados]      = useState<any[]>([])
+  const [loading,    setLoading]    = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
-  const [marcaSel, setMarcaSel]     = useState("")
+  const [marcaSel,   setMarcaSel]   = useState("")
+  const [filtrosAbertos, setFiltrosAbertos] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API_URL}/filtros`).then(r => r.json()),
+      fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()),
+    ]).then(([f, c]) => {
+      setOpModelos(f.modelos || [])
+      setOpMarcas(f.marcas || [])
+      setOpPorAno(c.por_ano || {})
+      setOpAnos(c.anos || [])
+    })
+  }, [])
+
+  const estacoesDisp = useMemo(() => {
+    if (!anosSel.length) return []
+    const cols = anosSel.flatMap(a => opPorAno[a] || [])
+    return [...new Set(cols.map(c => {
+      const u = c.toUpperCase()
+      if (u.includes("ALTO VERAO") || u.includes("ALTO VERÃO")) return "ALTO VERAO"
+      if (u.includes("INVERNO")) return "INVERNO"
+      if (u.includes("VERAO") || u.includes("VERÃO")) return "VERAO"
+      return "OUTROS"
+    }))]
+  }, [anosSel, opPorAno])
+
+  const colecoesDisp = useMemo(() => {
+    if (!anosSel.length) return []
+    const cols = anosSel.flatMap(a => opPorAno[a] || [])
+    const filt = estacoesSel.length > 0
+      ? cols.filter(c => estacoesSel.some(e => c.toUpperCase().includes(e.toUpperCase())))
+      : cols
+    const unicas = [...new Set(filt)]
+    if (buscaColecao) return unicas.filter(c => c.toLowerCase().includes(buscaColecao.toLowerCase()))
+    return unicas.slice(0, 20)
+  }, [anosSel, estacoesSel, opPorAno, buscaColecao])
+
+  const modelosVis = useMemo(() => {
+    if (buscaModelo) return opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase()))
+    const sel = opModelos.filter(m => modelosSel.includes(m))
+    const resto = opModelos.filter(m => !modelosSel.includes(m)).slice(0, 10 - sel.length)
+    return [...sel, ...resto]
+  }, [opModelos, buscaModelo, modelosSel])
+
+  const marcasVis = useMemo(() => {
+    if (buscaMarca) return opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase()))
+    const sel = opMarcas.filter(m => marcasSel.includes(m))
+    const resto = opMarcas.filter(m => !marcasSel.includes(m)).slice(0, 10 - sel.length)
+    return [...sel, ...resto]
+  }, [opMarcas, buscaMarca, marcasSel])
+
+  function toggle<T>(set: T[], val: T, setter: (v: T[]) => void) {
+    setter(set.includes(val) ? set.filter(x => x !== val) : [...set, val])
+  }
+
+  function limparFiltros() {
+    setLojasSel([]); setSexosSel([]); setModelosSel([]); setMarcasSel([])
+    setAnosSel([]); setEstacoesSel([]); setColecoesSel([]); setStatusFiltro([])
+    setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao("")
+  }
+
+  const totalFiltros = lojasSel.length + sexosSel.length + modelosSel.length +
+    marcasSel.length + anosSel.length + estacoesSel.length + colecoesSel.length
+
+  const colecoesAlvo = useMemo(() => {
+    if (colecoesSel.length > 0) return colecoesSel
+    if (!anosSel.length) return []
+    const cols = anosSel.flatMap(a => opPorAno[a] || [])
+    if (!estacoesSel.length) return cols
+    return cols.filter(c => estacoesSel.some(e => c.toUpperCase().includes(e.toUpperCase())))
+  }, [colecoesSel, anosSel, estacoesSel, opPorAno])
 
   const lojasFiltradas = lojasSel.length > 0 ? LOJAS.filter(l => lojasSel.includes(l.id)) : LOJAS
 
@@ -83,29 +169,25 @@ export default function ComprasPage() {
     setBuscaFeita(true)
     setDados([])
     setMarcaSel("")
+    setStatusFiltro([])
 
     const p = new URLSearchParams({ limite: "2000" })
-    if (marcaBusca.trim())  p.set("marca",  marcaBusca.trim())
-    if (modeloBusca.trim()) p.set("modelo", modeloBusca.trim())
-    if (sexosSel.length === 1) p.set("sexo", sexosSel[0])
-    if (anoBusca.trim()) p.set("ano", anoBusca.trim())
+    if (marcasSel.length === 1)  p.set("marca",  marcasSel[0])
+    if (modelosSel.length === 1) p.set("modelo", modelosSel[0])
+    if (sexosSel.length === 1)   p.set("sexo",   sexosSel[0])
+    if (anosSel.length === 1 && !colecoesSel.length && !estacoesSel.length)
+      p.set("ano", anosSel[0])
 
     try {
       const res = await fetch(`${API_URL}/matriz?${p}`)
       let rows = await res.json()
-      if (sexosSel.length > 1) rows = rows.filter((r: any) => sexosSel.some(s => r.sexo?.includes(s)))
+      if (sexosSel.length > 1)   rows = rows.filter((r: any) => sexosSel.some(s => r.sexo?.includes(s)))
+      if (modelosSel.length > 1) rows = rows.filter((r: any) => modelosSel.some(m => r.modelo?.includes(m)))
+      if (marcasSel.length > 1)  rows = rows.filter((r: any) => marcasSel.includes(r.marca))
+      if (colecoesAlvo.length)   rows = rows.filter((r: any) => colecoesAlvo.includes(r.colecao))
       setDados(rows)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function limpar() {
-    setMarcaBusca(""); setModeloBusca(""); setSexosSel([])
-    setLojasSel([]); setAnoBusca(""); setDados([])
-    setBuscaFeita(false); setMarcaSel(""); setStatusFiltro([])
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
   const dadosRich = useMemo(() => dados.map(row => {
@@ -129,11 +211,7 @@ export default function ComprasPage() {
     dadosFiltrados.forEach(row => {
       if (!map[row.marca]) map[row.marca] = {}
       const key = `${row.cod_produto}||${row.cor}`
-      if (!map[row.marca][key]) map[row.marca][key] = {
-        produto: row.produto, cor: row.cor, modelo: row.modelo,
-        colecao: row.colecao, sexo: row.sexo,
-        preco: row.preco_venda || 0, itens: []
-      }
+      if (!map[row.marca][key]) map[row.marca][key] = { produto: row.produto, cor: row.cor, modelo: row.modelo, colecao: row.colecao, sexo: row.sexo, preco: row.preco_venda || 0, itens: [] }
       map[row.marca][key].itens.push(row)
     })
     Object.values(map).forEach(prods => {
@@ -147,11 +225,9 @@ export default function ComprasPage() {
       })
     })
     return Object.entries(map).map(([marca, prods]) => ({
-      marca,
-      produtos: Object.values(prods),
+      marca, produtos: Object.values(prods),
       totalSKUs: Object.values(prods).reduce((s: number, p: any) => s + p.itens.length, 0),
-      criticos:  Object.values(prods).reduce((s: number, p: any) =>
-        s + p.itens.filter((i: any) => ["ZERADO","CRITICO"].includes(i.status.label)).length, 0),
+      criticos:  Object.values(prods).reduce((s: number, p: any) => s + p.itens.filter((i: any) => ["ZERADO","CRITICO"].includes(i.status.label)).length, 0),
     })).sort((a, b) => b.criticos - a.criticos || a.marca.localeCompare(b.marca))
   }, [dadosFiltrados])
 
@@ -162,14 +238,7 @@ export default function ComprasPage() {
   function exportarMarca() {
     const p = new URLSearchParams({ apenas_zerados: "false" })
     if (marcaAtiva) p.set("marca", marcaAtiva)
-    if (anoBusca) p.set("ano", anoBusca)
     window.open(`${API_URL}/export/faltantes?${p}`)
-  }
-
-  const inp = {
-    padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)",
-    fontSize: "13px", background: "var(--surface2)", color: "var(--text)",
-    outline: "none", width: "100%",
   }
 
   return (
@@ -177,7 +246,9 @@ export default function ComprasPage() {
       <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Decisão de Compra</h1>
-          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Busque e filtre por marca, ano, modelo ou sexo</p>
+          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
+            {dados.length > 0 ? `${dados.length} SKUs · ${porMarca.length} marcas` : "Selecione filtros e clique em Buscar"}
+          </p>
         </div>
         {marcaAtiva && (
           <button onClick={exportarMarca} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
@@ -186,57 +257,80 @@ export default function ComprasPage() {
         )}
       </div>
 
-      {/* Painel de busca */}
-      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", marginBottom: "16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "16px" }}>
-          <div>
-            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Marca</label>
-            <input placeholder="Ex: ZIANN, SALLO..." value={marcaBusca} onChange={e => setMarcaBusca(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
-          </div>
-          <div>
-            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Modelo</label>
-            <input placeholder="Ex: CALCA, CAMISETA..." value={modeloBusca} onChange={e => setModeloBusca(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
-          </div>
-          <div>
-            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Ano</label>
-            <input placeholder="Ex: 2026" value={anoBusca} onChange={e => setAnoBusca(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "12px" }}>
-          <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Sexo</div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {SEXOS.map(s => <Chip key={s} label={s} ativo={sexosSel.includes(s)} onClick={() => setSexosSel(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />)}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Loja</div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={lojasSel.includes(l.id)} onClick={() => setLojasSel(prev => prev.includes(l.id) ? prev.filter(x => x !== l.id) : [...prev, l.id])} />)}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={buscar} disabled={loading} style={{
-            padding: "10px 28px", background: "var(--primary)", color: "#fff",
-            border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer",
-            fontSize: "14px", fontWeight: 700, opacity: loading ? 0.7 : 1,
-          }}>
-            {loading ? "Buscando..." : "🔍 Buscar"}
+      {/* Painel de filtros */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "16px", overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: filtrosAbertos ? "1px solid var(--border)" : "none", background: "var(--surface2)" }}>
+          <button onClick={() => setFiltrosAbertos(!filtrosAbertos)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: "8px" }}>
+            {filtrosAbertos ? "▲" : "▼"} Filtros {totalFiltros > 0 ? `· ${totalFiltros} ativos` : ""}
           </button>
-          {buscaFeita && (
-            <button onClick={limpar} style={{ padding: "10px 20px", background: "none", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px" }}>
-              Limpar
+          <div style={{ display: "flex", gap: "8px" }}>
+            {totalFiltros > 0 && (
+              <button onClick={limparFiltros} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+                ✕ Limpar
+              </button>
+            )}
+            <button onClick={buscar} disabled={loading} style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
+              {loading ? "Buscando..." : "🔍 Buscar"}
             </button>
-          )}
+          </div>
         </div>
+
+        {filtrosAbertos && (
+          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
+            <div>
+              <label style={lbl}>Loja {lojasSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {lojasSel.length} sel.</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={lojasSel.includes(l.id)} onClick={() => toggle(lojasSel, l.id, setLojasSel)} />)}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Sexo {sexosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {sexosSel.length} sel.</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {SEXOS.map(s => <Chip key={s} label={s} ativo={sexosSel.includes(s)} onClick={() => toggle(sexosSel, s, setSexosSel)} />)}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Modelo {modelosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {modelosSel.length} sel.</span>}</label>
+              <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {modelosVis.map(m => <Chip key={m} label={m} small ativo={modelosSel.includes(m)} onClick={() => toggle(modelosSel, m, setModelosSel)} />)}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Marca {marcasSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {marcasSel.length} sel.</span>}</label>
+              <input placeholder={`Buscar entre ${opMarcas.length} marcas...`} value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {marcasVis.map(m => <Chip key={m} label={m} small ativo={marcasSel.includes(m)} onClick={() => toggle(marcasSel, m, setMarcasSel)} />)}
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Ano {anosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {anosSel.length} sel.</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {opAnos.map(a => <Chip key={a} label={a} small ativo={anosSel.includes(a)} onClick={() => { toggle(anosSel, a, setAnosSel); setEstacoesSel([]); setColecoesSel([]) }} />)}
+              </div>
+            </div>
+            {anosSel.length > 0 && (
+              <div>
+                <label style={lbl}>Estação {estacoesSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {estacoesSel.length} sel.</span>}</label>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {estacoesDisp.map(e => <Chip key={e} label={e} small ativo={estacoesSel.includes(e)} onClick={() => { toggle(estacoesSel, e, setEstacoesSel); setColecoesSel([]) }} />)}
+                </div>
+              </div>
+            )}
+            {anosSel.length > 0 && (
+              <div>
+                <label style={lbl}>Coleção {colecoesSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {colecoesSel.length} sel.</span>}</label>
+                <input placeholder="Buscar coleção..." value={buscaColecao} onChange={e => setBuscaColecao(e.target.value)} style={inp} />
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {colecoesDisp.map(c => <Chip key={c} label={c} small ativo={colecoesSel.includes(c)} onClick={() => toggle(colecoesSel, c, setColecoesSel)} />)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Filtro de status */}
+      {/* Filtro status */}
       {dadosRich.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Status:</span>
@@ -245,7 +339,7 @@ export default function ComprasPage() {
             if (count === 0) return null
             const ativo = statusFiltro.includes(opt.key)
             return (
-              <button key={opt.key} onClick={() => setStatusFiltro(prev => prev.includes(opt.key) ? prev.filter(x => x !== opt.key) : [...prev, opt.key])} style={{
+              <button key={opt.key} onClick={() => toggle(statusFiltro, opt.key, setStatusFiltro)} style={{
                 padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
                 fontWeight: ativo ? 700 : 400, border: "1px solid",
                 background: ativo ? opt.cor : "var(--surface2)",
@@ -257,9 +351,7 @@ export default function ComprasPage() {
             )
           })}
           {statusFiltro.length > 0 && (
-            <button onClick={() => setStatusFiltro([])} style={{ padding: "5px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
-              ✕ Todos
-            </button>
+            <button onClick={() => setStatusFiltro([])} style={{ padding: "5px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Todos</button>
           )}
         </div>
       )}
@@ -267,25 +359,23 @@ export default function ComprasPage() {
       {!buscaFeita ? (
         <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontSize: "40px", marginBottom: "16px" }}>🛍️</div>
-          <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text)", marginBottom: "8px" }}>Pronto para buscar</div>
-          <div style={{ fontSize: "13px", color: "var(--muted)" }}>Preencha os filtros e clique em Buscar</div>
+          <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text)", marginBottom: "8px" }}>Selecione filtros e clique em Buscar</div>
+          <div style={{ fontSize: "13px", color: "var(--muted)" }}>Filtre por marca, modelo, ano, coleção ou loja</div>
         </div>
       ) : loading ? (
         <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontSize: "24px", marginBottom: "12px" }}>⏳</div>Buscando...
         </div>
       ) : porMarca.length === 0 ? (
-        <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-          Nenhum produto encontrado.
-        </div>
+        <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>Nenhum produto encontrado.</div>
       ) : (
         <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-          {/* Sidebar marcas */}
+          {/* Sidebar */}
           <div style={{ width: "180px", flexShrink: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
             <div style={{ padding: "10px 14px", fontSize: "10px", fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "1px solid var(--border)", background: "var(--surface2)" }}>
               {porMarca.length} marcas
             </div>
-            <div style={{ maxHeight: "calc(100vh - 400px)", overflowY: "auto" }}>
+            <div style={{ maxHeight: "calc(100vh - 420px)", overflowY: "auto" }}>
               {porMarca.map(({ marca, totalSKUs, criticos }) => (
                 <div key={marca} onClick={() => setMarcaSel(marca)} style={{
                   padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)",
@@ -293,9 +383,7 @@ export default function ComprasPage() {
                   borderLeft: `3px solid ${marcaAtiva === marca ? "var(--primary)" : "transparent"}`,
                   transition: "all 0.1s",
                 }}>
-                  <div style={{ fontSize: "12px", fontWeight: marcaAtiva === marca ? 700 : 500, color: marcaAtiva === marca ? "var(--primary)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {marca}
-                  </div>
+                  <div style={{ fontSize: "12px", fontWeight: marcaAtiva === marca ? 700 : 500, color: marcaAtiva === marca ? "var(--primary)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{marca}</div>
                   <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px", display: "flex", gap: "6px" }}>
                     <span>{totalSKUs} SKUs</span>
                     {criticos > 0 && <span style={{ color: "var(--danger)", fontWeight: 600 }}>⚠ {criticos}</span>}
@@ -305,7 +393,7 @@ export default function ComprasPage() {
             </div>
           </div>
 
-          {/* Produtos da marca */}
+          {/* Produtos */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
             {dadosMarca && (
               <>
@@ -317,9 +405,7 @@ export default function ComprasPage() {
                       {dadosMarca.criticos > 0 && <span style={{ color: "var(--danger)", fontWeight: 600, marginLeft: "8px" }}>⚠ {dadosMarca.criticos} críticos</span>}
                     </div>
                   </div>
-                  <button onClick={exportarMarca} style={{ padding: "6px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
-                    ⬇ CSV
-                  </button>
+                  <button onClick={exportarMarca} style={{ padding: "6px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>⬇ CSV</button>
                 </div>
 
                 {dadosMarca.produtos.map((prod: any, pi: number) => {
@@ -339,7 +425,6 @@ export default function ComprasPage() {
                           <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div><div style={{ fontSize: "14px", fontWeight: 700 }}>R$ {prod.preco.toFixed(2)}</div></div>
                         </div>
                       </div>
-
                       <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                           <thead>
