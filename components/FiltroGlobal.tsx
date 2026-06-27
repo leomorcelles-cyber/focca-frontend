@@ -1,46 +1,42 @@
 "use client"
-import { useState, useMemo } from "react"
-import { useFiltro } from "@/lib/FiltroContext"
+import { useState, useMemo, useEffect } from "react"
 
-const LOJAS_OPTS = [
-  { id: 1, nome: "P. Nereu" },
-  { id: 3, nome: "Vidal" },
-  { id: 4, nome: "Imbuiá" },
-  { id: 5, nome: "Lontras" },
-  { id: 6, nome: "Chapadão" },
-  { id: 7, nome: "Hype" },
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+
+export const LOJAS = [
+  { id: 1, nome: "P.Nereu",  key: "pres_nereu" },
+  { id: 3, nome: "Vidal",    key: "vidal_ramos" },
+  { id: 4, nome: "Imbuiá",   key: "imbuia" },
+  { id: 5, nome: "Lontras",  key: "lontras" },
+  { id: 6, nome: "Chapadão", key: "chapadao" },
+  { id: 7, nome: "Hype",     key: "focca_hype" },
 ]
 
-const SEXOS_OPTS = ["FEMININO", "MASCULINO", "FEM INF", "MASC INF", "UNISSEX", "FEMININO CURVES"]
+export const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEMININO CURVES"]
 
-const SALDO_OPCOES = [
-  { val: 0,   label: "Zerado",      desc: "Saldo = 0" },
-  { val: 2,   label: "Crítico",     desc: "Saldo ≤ 2" },
-  { val: 5,   label: "Baixo",       desc: "Saldo ≤ 5" },
-  { val: 10,  label: "Médio",       desc: "Saldo ≤ 10" },
-  { val: 999, label: "Todos",       desc: "Sem filtro" },
-]
-
-type Props = {
-  opcoes: {
-    modelos?: string[]
-    marcas?: string[]
-    porAno?: Record<string, string[]>
-    anos?: string[]
-  }
-  mostrarLojas?: boolean
-  mostrarSaldo?: boolean
+// Tipo do estado de filtros — compartilhado por todas as páginas
+export type FiltroState = {
+  lojas: number[]
+  sexos: string[]
+  modelos: string[]
+  marcas: string[]
+  anos: string[]
+  estacoes: string[]
+  colecoes: string[]
+  saldoMax: number | null
 }
 
-function Chip({ label, ativo, onClick, small }: {
-  label: string, ativo: boolean, onClick: () => void, small?: boolean
-}) {
+export const filtroVazio: FiltroState = {
+  lojas: [], sexos: [], modelos: [], marcas: [],
+  anos: [], estacoes: [], colecoes: [], saldoMax: null,
+}
+
+function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
   return (
     <button onClick={onClick} style={{
-      padding: small ? "3px 10px" : "5px 12px",
-      borderRadius: "20px", fontSize: small ? "11px" : "12px",
-      cursor: "pointer", fontWeight: ativo ? 600 : 400,
-      border: "1px solid",
+      padding: small ? "3px 10px" : "5px 12px", borderRadius: "20px",
+      fontSize: small ? "11px" : "12px", cursor: "pointer",
+      fontWeight: ativo ? 600 : 400, border: "1px solid",
       background: ativo ? "var(--primary)" : "var(--surface2)",
       color: ativo ? "#fff" : "var(--text)",
       borderColor: ativo ? "var(--primary)" : "var(--border)",
@@ -49,356 +45,198 @@ function Chip({ label, ativo, onClick, small }: {
   )
 }
 
-export default function FiltroGlobal({ opcoes, mostrarLojas = true, mostrarSaldo = true }: Props) {
-  const {
-    filtros, updateFiltro, limpar, temFiltro, totalAtivos,
-    filtrosSalvos, salvarFiltro, aplicarFiltroSalvo, deletarFiltroSalvo,
-  } = useFiltro()
+const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
+const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "100%", display: "block" as const }
 
-  const [aberto, setAberto] = useState(false)
-  const [nomeFiltro, setNomeFiltro] = useState("")
-  const [salvando, setSalvando] = useState(false)
-  const [buscaModelo, setBuscaModelo] = useState("")
-  const [buscaMarca, setBuscaMarca] = useState("")
+type Props = {
+  filtros: FiltroState
+  setFiltros: (f: FiltroState) => void
+  onBuscar: () => void
+  loading?: boolean
+  mostrarSaldo?: boolean  // mostra slider de quantidade máxima
+}
+
+export default function FiltroGlobal({ filtros, setFiltros, onBuscar, loading, mostrarSaldo }: Props) {
+  const [opModelos, setOpModelos] = useState<string[]>([])
+  const [opMarcas,  setOpMarcas]  = useState<string[]>([])
+  const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
+  const [opAnos,    setOpAnos]    = useState<string[]>([])
+
+  const [buscaModelo,  setBuscaModelo]  = useState("")
+  const [buscaMarca,   setBuscaMarca]   = useState("")
   const [buscaColecao, setBuscaColecao] = useState("")
+  const [aberto, setAberto] = useState(true)
 
-  const todosModelos = opcoes.modelos || []
-  const todasMarcas  = opcoes.marcas  || []
-  const todosAnos    = opcoes.anos    || []
-  const porAno       = opcoes.porAno  || {}
+  useEffect(() => {
+    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => {
+      setOpModelos(f.modelos || []); setOpMarcas(f.marcas || [])
+    }).catch(() => {})
+    fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => {
+      setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || [])
+    }).catch(() => {})
+  }, [])
 
-  const modelosVisiveis = useMemo(() => {
-    if (buscaModelo.trim()) return todosModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase()))
-    const sel = todosModelos.filter(m => filtros.modelos.includes(m))
-    const resto = todosModelos.filter(m => !filtros.modelos.includes(m)).slice(0, Math.max(0, 10 - sel.length))
-    return [...sel, ...resto]
-  }, [todosModelos, buscaModelo, filtros.modelos])
+  function up(patch: Partial<FiltroState>) { setFiltros({ ...filtros, ...patch }) }
+  function toggle<T>(arr: T[], val: T): T[] { return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] }
 
-  const marcasVisiveis = useMemo(() => {
-    if (buscaMarca.trim()) return todasMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase()))
-    const sel = todasMarcas.filter(m => filtros.marcas.includes(m))
-    const resto = todasMarcas.filter(m => !filtros.marcas.includes(m)).slice(0, Math.max(0, 10 - sel.length))
-    return [...sel, ...resto]
-  }, [todasMarcas, buscaMarca, filtros.marcas])
-
-  const estacoesDisponiveis = useMemo(() => {
+  const estacoesDisp = useMemo(() => {
     if (!filtros.anos.length) return []
-    const doAno = filtros.anos.flatMap(a => porAno[a] || [])
-    return [...new Set(doAno.map(c => {
+    const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
+    return [...new Set(cols.map(c => {
       const u = c.toUpperCase()
       if (u.includes("ALTO VERAO") || u.includes("ALTO VERÃO")) return "ALTO VERAO"
       if (u.includes("INVERNO")) return "INVERNO"
       if (u.includes("VERAO") || u.includes("VERÃO")) return "VERAO"
       return "OUTROS"
     }))]
-  }, [filtros.anos, porAno])
+  }, [filtros.anos, opPorAno])
 
-  const colecoesDisponiveis = useMemo(() => {
+  const colecoesDisp = useMemo(() => {
     if (!filtros.anos.length) return []
-    const doAno = filtros.anos.flatMap(a => porAno[a] || [])
-    const filtradas = filtros.estacoes.length > 0
-      ? doAno.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase())))
-      : doAno
-    const unicas = [...new Set(filtradas)]
-    if (buscaColecao.trim()) return unicas.filter(c => c.toLowerCase().includes(buscaColecao.toLowerCase()))
+    const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
+    const filt = filtros.estacoes.length > 0
+      ? cols.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase())))
+      : cols
+    const unicas = [...new Set(filt)]
+    if (buscaColecao) return unicas.filter(c => c.toLowerCase().includes(buscaColecao.toLowerCase()))
     const sel = unicas.filter(c => filtros.colecoes.includes(c))
-    const resto = unicas.filter(c => !filtros.colecoes.includes(c)).slice(0, Math.max(0, 10 - sel.length))
-    return [...sel, ...resto]
-  }, [filtros.anos, filtros.estacoes, filtros.colecoes, porAno, buscaColecao])
+    return [...sel, ...unicas.filter(c => !filtros.colecoes.includes(c)).slice(0, Math.max(0, 12 - sel.length))]
+  }, [filtros.anos, filtros.estacoes, filtros.colecoes, opPorAno, buscaColecao])
 
-  function toggle(key: "lojas"|"sexos"|"modelos"|"marcas"|"anos"|"estacoes"|"colecoes", val: any) {
-    const atual = filtros[key] as any[]
-    updateFiltro(key, atual.includes(val) ? atual.filter(x => x !== val) : [...atual, val])
-  }
+  // Chips lazy — só renderiza quando busca ou tem selecionado
+  const modelosVis = useMemo(() => {
+    if (!buscaModelo && filtros.modelos.length === 0) return []
+    if (buscaModelo) return opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase())).slice(0, 20)
+    return opModelos.filter(m => filtros.modelos.includes(m))
+  }, [opModelos, buscaModelo, filtros.modelos])
 
-  function toggleAno(ano: string) {
-    const novos = filtros.anos.includes(ano)
-      ? filtros.anos.filter(x => x !== ano)
-      : [...filtros.anos, ano]
-    updateFiltro("anos", novos)
-    if (novos.length === 0) { updateFiltro("estacoes", []); updateFiltro("colecoes", []) }
-  }
+  const marcasVis = useMemo(() => {
+    if (!buscaMarca && filtros.marcas.length === 0) return []
+    if (buscaMarca) return opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase())).slice(0, 20)
+    return opMarcas.filter(m => filtros.marcas.includes(m))
+  }, [opMarcas, buscaMarca, filtros.marcas])
 
-  function handleSalvar() {
-    if (!nomeFiltro.trim()) return
-    salvarFiltro(nomeFiltro.trim())
-    setNomeFiltro(""); setSalvando(false)
-  }
+  const totalFiltros = filtros.lojas.length + filtros.sexos.length + filtros.modelos.length +
+    filtros.marcas.length + filtros.anos.length + filtros.estacoes.length + filtros.colecoes.length +
+    (filtros.saldoMax !== null ? 1 : 0)
 
-  const saldoAtual = filtros.saldoMax ?? 999
-  const saldoLabel = SALDO_OPCOES.find(o => o.val === saldoAtual)?.label || "Todos"
-
-  const inp = {
-    padding: "5px 10px", borderRadius: "6px",
-    border: "1px solid var(--border)", fontSize: "12px",
-    marginBottom: "8px", background: "var(--surface2)",
-    color: "var(--text)", outline: "none", width: "200px",
-    display: "block" as const,
-  }
-
-  const lbl = {
-    fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const,
-    textTransform: "uppercase" as const, letterSpacing: "0.5px",
-    marginBottom: "8px", display: "flex" as const,
-    alignItems: "center" as const, gap: "6px",
+  function limpar() {
+    setFiltros({ ...filtroVazio })
+    setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao("")
   }
 
   return (
-    <div style={{ marginBottom: "16px" }}>
-
-      {/* Barra superior */}
-      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" }}>
-        {filtrosSalvos.map(fs => (
-          <div key={fs.id} style={{ display: "flex" }}>
-            <button onClick={() => aplicarFiltroSalvo(fs.id)} style={{
-              padding: "4px 10px", borderRadius: "20px 0 0 20px", fontSize: "12px",
-              cursor: "pointer", fontWeight: 500, border: "1px solid var(--primary)",
-              borderRight: "none", background: "var(--primary-light)", color: "var(--primary)", whiteSpace: "nowrap",
-            }}>⭐ {fs.nome}</button>
-            <button onClick={() => deletarFiltroSalvo(fs.id)} style={{
-              padding: "4px 7px", borderRadius: "0 20px 20px 0", cursor: "pointer",
-              border: "1px solid var(--primary)", background: "var(--primary-light)",
-              color: "var(--primary)", fontSize: "11px",
-            }}>✕</button>
-          </div>
-        ))}
-
-        <div style={{ flex: 1 }} />
-
-        {temFiltro && !salvando && (
-          <button onClick={() => setSalvando(true)} style={{
-            padding: "5px 12px", background: "none", border: "1px dashed var(--border)",
-            borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap",
-          }}>+ Salvar filtro</button>
-        )}
-
-        {salvando && (
-          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-            <input autoFocus placeholder="Nome do filtro..." value={nomeFiltro}
-              onChange={e => setNomeFiltro(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleSalvar(); if (e.key === "Escape") setSalvando(false) }}
-              style={{ ...inp, marginBottom: 0, width: "160px", display: "inline-block" }}
-            />
-            <button onClick={handleSalvar} style={{ padding: "5px 10px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "12px" }}>Salvar</button>
-            <button onClick={() => setSalvando(false)} style={{ padding: "5px 8px", background: "none", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", fontSize: "12px", color: "var(--muted)" }}>✕</button>
-          </div>
-        )}
-
-        {temFiltro && (
-          <button onClick={limpar} style={{
-            padding: "5px 12px", background: "none", border: "1px solid var(--border)",
-            borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px", whiteSpace: "nowrap",
-          }}>✕ Limpar ({totalAtivos})</button>
-        )}
-
-        <button onClick={() => setAberto(!aberto)} style={{
-          padding: "5px 14px",
-          background: aberto ? "var(--primary)" : temFiltro ? "var(--primary-light)" : "var(--surface2)",
-          color: aberto ? "#fff" : temFiltro ? "var(--primary)" : "var(--muted)",
-          border: `1px solid ${aberto || temFiltro ? "var(--primary)" : "var(--border)"}`,
-          borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: 600, whiteSpace: "nowrap",
-        }}>
-          {aberto ? "▲" : "▼"} Filtros{totalAtivos > 0 ? ` · ${totalAtivos} ativos` : ""}
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "16px", overflow: "hidden" }}>
+      <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: aberto ? "1px solid var(--border)" : "none", background: "var(--surface2)" }}>
+        <button onClick={() => setAberto(!aberto)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
+          {aberto ? "▲" : "▼"} Filtros {totalFiltros > 0 ? `· ${totalFiltros} ativos` : ""}
         </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {totalFiltros > 0 && <button onClick={limpar} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Limpar</button>}
+          <button onClick={onBuscar} disabled={loading} style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
+            {loading ? "Buscando..." : "🔍 Buscar"}
+          </button>
+        </div>
       </div>
 
-      {/* Painel */}
       {aberto && (
-        <div style={{
-          background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: "12px", padding: "20px",
-          display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-          gap: "20px",
-        }}>
-
-          {/* Lojas */}
-          {mostrarLojas && (
-            <div>
-              <div style={lbl}>
-                LOJA
-                {filtros.lojas.length > 0 && <>
-                  <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length} sel.</span>
-                  <button onClick={() => updateFiltro("lojas", [])} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-                </>}
-              </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {LOJAS_OPTS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => toggle("lojas", l.id)} />)}
-              </div>
+        <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
+          {/* Loja */}
+          <div>
+            <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => up({ lojas: toggle(filtros.lojas, l.id) })} />)}
             </div>
-          )}
+          </div>
 
           {/* Sexo */}
           <div>
-            <div style={lbl}>
-              SEXO
-              {filtros.sexos.length > 0 && <>
-                <span style={{ color: "var(--primary)" }}>· {filtros.sexos.length} sel.</span>
-                <button onClick={() => updateFiltro("sexos", [])} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-              </>}
-            </div>
+            <label style={lbl}>Sexo {filtros.sexos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.sexos.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {SEXOS_OPTS.map(s => <Chip key={s} label={s} ativo={filtros.sexos.includes(s)} onClick={() => toggle("sexos", s)} />)}
+              {SEXOS.map(s => <Chip key={s} label={s} ativo={filtros.sexos.includes(s)} onClick={() => up({ sexos: toggle(filtros.sexos, s) })} />)}
             </div>
           </div>
 
-          {/* Modelo */}
+          {/* Modelo — multi, chips lazy */}
           <div>
-            <div style={lbl}>
-              MODELO
-              {filtros.modelos.length > 0 && <>
-                <span style={{ color: "var(--primary)" }}>· {filtros.modelos.length} sel.</span>
-                <button onClick={() => { updateFiltro("modelos", []); setBuscaModelo("") }} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-              </>}
-            </div>
-            <input placeholder={`Buscar entre ${todosModelos.length} modelos...`}
-              value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {modelosVisiveis.map(m => <Chip key={m} label={m} small ativo={filtros.modelos.includes(m)} onClick={() => toggle("modelos", m)} />)}
-              {!buscaModelo && todosModelos.length > 10 && (
-                <span style={{ fontSize: "11px", color: "var(--muted)", alignSelf: "center" }}>
-                  +{todosModelos.length - modelosVisiveis.length} — busque para ver mais
-                </span>
-              )}
-            </div>
+            <label style={lbl}>Modelo {filtros.modelos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.modelos.length}</span>}</label>
+            <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
+            {(buscaModelo || filtros.modelos.length > 0) && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {modelosVis.map(m => <Chip key={m} label={m} small ativo={filtros.modelos.includes(m)} onClick={() => up({ modelos: toggle(filtros.modelos, m) })} />)}
+              </div>
+            )}
           </div>
 
-          {/* Marca */}
+          {/* Marca — multi, chips lazy */}
           <div>
-            <div style={lbl}>
-              MARCA
-              {filtros.marcas.length > 0 && <>
-                <span style={{ color: "var(--primary)" }}>· {filtros.marcas.length} sel.</span>
-                <button onClick={() => { updateFiltro("marcas", []); setBuscaMarca("") }} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-              </>}
-            </div>
-            <input placeholder={`Buscar entre ${todasMarcas.length} marcas...`}
-              value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
+            <label style={lbl}>Marca {filtros.marcas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.marcas.length}</span>}</label>
+            <input placeholder={`Buscar entre ${opMarcas.length} marcas...`} value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
+            {(buscaMarca || filtros.marcas.length > 0) && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {marcasVis.map(m => <Chip key={m} label={m} small ativo={filtros.marcas.includes(m)} onClick={() => up({ marcas: toggle(filtros.marcas, m) })} />)}
+              </div>
+            )}
+          </div>
+
+          {/* Ano — multi */}
+          <div>
+            <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {marcasVisiveis.map(m => <Chip key={m} label={m} small ativo={filtros.marcas.includes(m)} onClick={() => toggle("marcas", m)} />)}
-              {!buscaMarca && todasMarcas.length > 10 && (
-                <span style={{ fontSize: "11px", color: "var(--muted)", alignSelf: "center" }}>
-                  +{todasMarcas.length - marcasVisiveis.length} — busque para ver mais
-                </span>
-              )}
+              {opAnos.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)}
+                onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
             </div>
           </div>
 
-          {/* Saldo máximo */}
+          {/* Estação — multi (só com ano) */}
+          {filtros.anos.length > 0 && (
+            <div>
+              <label style={lbl}>Estação {filtros.estacoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.estacoes.length}</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {estacoesDisp.map(e => <Chip key={e} label={e} small ativo={filtros.estacoes.includes(e)}
+                  onClick={() => up({ estacoes: toggle(filtros.estacoes, e), colecoes: [] })} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Coleção — multi (só com ano) */}
+          {filtros.anos.length > 0 && (
+            <div>
+              <label style={lbl}>Coleção {filtros.colecoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.colecoes.length}</span>}</label>
+              <input placeholder="Buscar coleção..." value={buscaColecao} onChange={e => setBuscaColecao(e.target.value)} style={inp} />
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {colecoesDisp.map(c => <Chip key={c} label={c} small ativo={filtros.colecoes.includes(c)}
+                  onClick={() => up({ colecoes: toggle(filtros.colecoes, c) })} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Saldo máximo — slider de quantidade */}
           {mostrarSaldo && (
             <div>
-              <div style={lbl}>
-                SALDO EM ESTOQUE
-                {saldoAtual < 999 && (
-                  <button onClick={() => updateFiltro("saldoMax", 999)} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-                )}
-              </div>
-              {/* Chips de saldo */}
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px" }}>
-                {SALDO_OPCOES.map(o => (
-                  <button key={o.val} onClick={() => updateFiltro("saldoMax", o.val)} style={{
-                    padding: "4px 12px", borderRadius: "20px", fontSize: "12px",
-                    cursor: "pointer", fontWeight: saldoAtual === o.val ? 600 : 400,
-                    border: "1px solid",
-                    background: saldoAtual === o.val
-                      ? o.val === 0 ? "var(--danger)"
-                      : o.val <= 2 ? "var(--warning)"
-                      : o.val <= 5 ? "var(--primary)"
-                      : "var(--success)"
-                      : "var(--surface2)",
-                    color: saldoAtual === o.val ? "#fff" : "var(--text)",
-                    borderColor: saldoAtual === o.val
-                      ? o.val === 0 ? "var(--danger)"
-                      : o.val <= 2 ? "var(--warning)"
-                      : o.val <= 5 ? "var(--primary)"
-                      : "var(--success)"
-                      : "var(--border)",
-                    whiteSpace: "nowrap" as const,
-                    transition: "all 0.1s",
-                  }}>
-                    {o.label}
-                    <span style={{ fontSize: "10px", opacity: 0.8, marginLeft: "4px" }}>({o.desc})</span>
-                  </button>
+              <label style={lbl}>Saldo máximo na rede {filtros.saldoMax !== null && <span style={{ color: "var(--primary)" }}>· ≤ {filtros.saldoMax}</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                {[0, 2, 5, 10, 20].map(v => (
+                  <Chip key={v} label={v === 0 ? "Zerados" : `≤ ${v}`} small ativo={filtros.saldoMax === v} onClick={() => up({ saldoMax: filtros.saldoMax === v ? null : v })} />
                 ))}
+                {filtros.saldoMax !== null && <Chip label="✕" small ativo={false} onClick={() => up({ saldoMax: null })} />}
               </div>
-              {/* Slider */}
-              <div>
-                <input type="range" min={0} max={20} step={1}
-                  value={saldoAtual === 999 ? 20 : saldoAtual}
-                  onChange={e => {
-                    const v = Number(e.target.value)
-                    updateFiltro("saldoMax", v === 20 ? 999 : v)
-                  }}
-                  style={{ width: "100%", accentColor: "var(--primary)" }}
-                />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-                  <span>0 (zerado)</span>
-                  <span style={{ fontWeight: 600, color: "var(--primary)" }}>
-                    {saldoAtual === 999 ? "Todos" : `≤ ${saldoAtual} peças`}
-                  </span>
-                  <span>Todos</span>
-                </div>
-              </div>
+              <input type="range" min={0} max={50} value={filtros.saldoMax ?? 50}
+                onChange={e => up({ saldoMax: Number(e.target.value) })}
+                style={{ width: "100%", accentColor: "var(--primary)" }} />
             </div>
           )}
-
-          {/* Ano */}
-          <div>
-            <div style={lbl}>
-              ANO
-              {filtros.anos.length > 0 && <>
-                <span style={{ color: "var(--primary)" }}>· {filtros.anos.length} sel.</span>
-                <button onClick={() => { updateFiltro("anos", []); updateFiltro("estacoes", []); updateFiltro("colecoes", []) }} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-              </>}
-            </div>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {todosAnos.length === 0
-                ? <span style={{ fontSize: "12px", color: "var(--muted)" }}>Carregando...</span>
-                : todosAnos.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => toggleAno(a)} />)
-              }
-            </div>
-          </div>
-
-          {/* Estação */}
-          {filtros.anos.length > 0 && (
-            <div>
-              <div style={lbl}>
-                ESTAÇÃO
-                {filtros.estacoes.length > 0 && <>
-                  <span style={{ color: "var(--primary)" }}>· {filtros.estacoes.length} sel.</span>
-                  <button onClick={() => { updateFiltro("estacoes", []); updateFiltro("colecoes", []) }} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-                </>}
-              </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {estacoesDisponiveis.map(e => (
-                  <Chip key={e} label={e} small ativo={filtros.estacoes.includes(e)} onClick={() => {
-                    toggle("estacoes", e)
-                    updateFiltro("colecoes", [])
-                  }} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Coleção */}
-          {filtros.anos.length > 0 && (
-            <div>
-              <div style={lbl}>
-                COLEÇÃO
-                {filtros.colecoes.length > 0 && <>
-                  <span style={{ color: "var(--primary)" }}>· {filtros.colecoes.length} sel.</span>
-                  <button onClick={() => { updateFiltro("colecoes", []); setBuscaColecao("") }} style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>limpar</button>
-                </>}
-              </div>
-              <input placeholder="Buscar coleção..." value={buscaColecao}
-                onChange={e => setBuscaColecao(e.target.value)} style={inp} />
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {colecoesDisponiveis.map(c => <Chip key={c} label={c} small ativo={filtros.colecoes.includes(c)} onClick={() => toggle("colecoes", c)} />)}
-              </div>
-            </div>
-          )}
-
         </div>
       )}
     </div>
   )
+}
+
+// Helper: resolve coleções alvo a partir de ano/estação/coleção
+export function resolverColecoes(filtros: FiltroState, opPorAno: Record<string,string[]>): string[] {
+  if (filtros.colecoes.length > 0) return filtros.colecoes
+  if (!filtros.anos.length) return []
+  const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
+  if (!filtros.estacoes.length) return cols
+  return cols.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase())))
 }
