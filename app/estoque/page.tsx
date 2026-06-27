@@ -1,8 +1,6 @@
 "use client"
-import { useEffect, useState, useMemo, useCallback, useRef } from "react"
-import { api } from "@/lib/api"
+import { useState, useMemo, useCallback } from "react"
 import { useFiltro } from "@/lib/FiltroContext"
-import FiltroGlobal from "@/components/FiltroGlobal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -18,6 +16,8 @@ const LOJAS = [
 const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
 
+const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEMININO CURVES"]
+
 function saldoReal(v: any) { return Math.max(0, Number(v) || 0) }
 
 function corSaldo(v: number) {
@@ -27,119 +27,68 @@ function corSaldo(v: number) {
   return { bg: "transparent", color: "var(--text)", fw: 400 }
 }
 
-const thS = {
-  padding: "5px 8px", color: "var(--muted)" as const, fontWeight: 600 as const,
-  fontSize: "10px" as const, textTransform: "uppercase" as const,
-  letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const,
+function Chip({ label, ativo, onClick }: { label: string, ativo: boolean, onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+      fontWeight: ativo ? 600 : 400, border: "1px solid",
+      background: ativo ? "var(--primary)" : "var(--surface2)",
+      color: ativo ? "#fff" : "var(--text)",
+      borderColor: ativo ? "var(--primary)" : "var(--border)",
+      whiteSpace: "nowrap" as const, transition: "all 0.1s",
+    }}>{label}</button>
+  )
 }
 
 export default function EstoquePage() {
-  const { filtros } = useFiltro()
+  // Filtros locais — não conectados ao FiltroContext para evitar re-renders globais
+  const [marcaBusca, setMarcaBusca] = useState("")
+  const [modeloBusca, setModeloBusca] = useState("")
+  const [sexosSel, setSexosSel] = useState<string[]>([])
+  const [lojasSel, setLojasSel] = useState<number[]>([])
+  const [anoBusca, setAnoBusca] = useState("")
+
   const [dados, setDados] = useState<any[]>([])
-  const [modelos, setModelos] = useState<string[]>([])
-  const [marcas, setMarcas] = useState<string[]>([])
-  const [porAno, setPorAno] = useState<Record<string, string[]>>({})
-  const [anos, setAnos] = useState<string[]>([])
-  const [opcoesProntas, setOpcoesProntas] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [progresso, setProgresso] = useState(0)
+  const [buscaFeita, setBuscaFeita] = useState(false)
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
-  const [ultimaSync, setUltimaSync] = useState<string | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
 
-  // WebSocket
-  useEffect(() => {
-    const wsUrl = API_URL.replace("http", "ws").replace("https", "wss")
-    const ws = new WebSocket(`${wsUrl}/ws`)
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data)
-      if (msg.tipo === "sync_completo") { setUltimaSync(msg.ultima_sync); carregarTudo() }
-      if (msg.tipo === "status") setUltimaSync(msg.ultima_sync)
-    }
-    return () => ws.close()
-  }, [])
-
-  useEffect(() => {
-    Promise.all([
-      api.filtros(),
-      fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()),
-    ]).then(([f, c]) => {
-      setModelos(f.modelos || [])
-      setMarcas(f.marcas || [])
-      setPorAno(c.por_ano || {})
-      setAnos(c.anos || [])
-      setOpcoesProntas(true)
-    })
-  }, [])
-
-  const colecoesAlvo = useMemo(() => {
-    if (filtros.colecoes.length > 0) return filtros.colecoes
-    if (!porAno || filtros.anos.length === 0) return []
-    const doAno = filtros.anos.flatMap((a: string) => porAno[a] || [])
-    if (filtros.estacoes.length === 0) return doAno
-    return doAno.filter((c: string) =>
-      filtros.estacoes.some((e: string) => c.toUpperCase().includes(e.toUpperCase()))
-    )
-  }, [filtros.colecoes, filtros.anos, filtros.estacoes, porAno])
-
-  const lojasFiltradas = useMemo(() =>
-    filtros.lojas.length > 0 ? LOJAS.filter(l => filtros.lojas.includes(l.id)) : LOJAS
-  , [filtros.lojas])
-
-  function aplicarFiltros(rows: any[]) {
-    let f = rows
-    if (filtros.sexos.length > 1)   f = f.filter(r => filtros.sexos.some(s => r.sexo?.includes(s)))
-    if (filtros.modelos.length > 1) f = f.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
-    if (filtros.marcas.length > 1)  f = f.filter(r => filtros.marcas.includes(r.marca))
-    if (colecoesAlvo.length > 0)    f = f.filter(r => colecoesAlvo.includes(r.colecao))
-    if ((filtros.saldoMax ?? 999) < 999)
-      f = f.filter(r => lojasFiltradas.some(l => saldoReal(r[l.key]) <= filtros.saldoMax))
-    return f
-  }
-
-  async function carregarTudo() {
-    if (!opcoesProntas) return
-    if (abortRef.current) abortRef.current.abort()
-    abortRef.current = new AbortController()
-
+  async function buscar() {
     setLoading(true)
-    setProgresso(0)
+    setBuscaFeita(true)
     setDados([])
     setExpandidos(new Set())
 
-    const p: Record<string, string> = { limite: "500", offset: "0" }
-    if (filtros.modelos.length === 1) p.modelo = filtros.modelos[0]
-    if (filtros.marcas.length === 1)  p.marca  = filtros.marcas[0]
-    if (filtros.sexos.length === 1)   p.sexo   = filtros.sexos[0]
+    const p = new URLSearchParams({ limite: "1000" })
+    if (marcaBusca.trim())  p.set("marca",  marcaBusca.trim())
+    if (modeloBusca.trim()) p.set("modelo", modeloBusca.trim())
+    if (sexosSel.length === 1) p.set("sexo", sexosSel[0])
+    if (anoBusca.trim()) p.set("ano", anoBusca.trim())
 
     try {
-      const primeiro = await api.matriz(p)
-      setDados(aplicarFiltros(primeiro))
-      setProgresso(50)
+      const res = await fetch(`${API_URL}/matriz?${p}`)
+      let rows = await res.json()
 
-      if (primeiro.length === 500) {
-        const segundo = await api.matriz({ ...p, offset: "500" })
-        setDados(prev => [...prev, ...aplicarFiltros(segundo)])
-        setProgresso(80)
+      // Filtros adicionais no frontend
+      if (sexosSel.length > 1) rows = rows.filter((r: any) => sexosSel.some(s => r.sexo?.includes(s)))
+      if (lojasSel.length > 0) rows = rows.filter((r: any) =>
+        lojasSel.some(l => saldoReal(r[LOJAS.find(lo => lo.id === l)?.key || ""]) > 0)
+      )
 
-        if (segundo.length === 500) {
-          const terceiro = await api.matriz({ ...p, offset: "1000" })
-          setDados(prev => [...prev, ...aplicarFiltros(terceiro)])
-          setProgresso(100)
-        }
-      }
-    } catch (e: any) {
-      if (e?.name !== "AbortError") console.error(e)
+      setDados(rows)
+    } catch (e) {
+      console.error(e)
     } finally {
       setLoading(false)
-      setProgresso(100)
     }
   }
 
-  useEffect(() => {
-    if (!opcoesProntas) return
-    carregarTudo()
-  }, [filtros, colecoesAlvo, opcoesProntas])
+  function limpar() {
+    setMarcaBusca(""); setModeloBusca(""); setSexosSel([])
+    setLojasSel([]); setAnoBusca(""); setDados([]); setBuscaFeita(false)
+  }
+
+  const lojasFiltradas = lojasSel.length > 0 ? LOJAS.filter(l => lojasSel.includes(l.id)) : LOJAS
 
   const grupos = useMemo(() => {
     const map: Record<string, any> = {}
@@ -166,38 +115,100 @@ export default function EstoquePage() {
     setExpandidos(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }, [])
 
+  const inp = {
+    padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)",
+    fontSize: "13px", background: "var(--surface2)", color: "var(--text)",
+    outline: "none", width: "100%",
+  }
+
+  const thS = {
+    padding: "5px 8px", color: "var(--muted)" as const, fontWeight: 600 as const,
+    fontSize: "10px" as const, textTransform: "uppercase" as const,
+    letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const,
+  }
+
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Estoque por Loja</h1>
-          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
-            {grupos.length > 0 ? `${grupos.length} produtos · ${dados.length} SKUs` : "Todos os produtos"}
-            {ultimaSync && <span style={{ marginLeft: "8px" }}>· atualizado {new Date(ultimaSync).toLocaleTimeString("pt-BR")}</span>}
-          </p>
-        </div>
-        {grupos.length > 0 && (
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => setExpandidos(new Set(grupos.map(([k]) => k)))}
-              style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
-              Expandir todos
-            </button>
-            <button onClick={() => setExpandidos(new Set())}
-              style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
-              Recolher todos
-            </button>
-          </div>
-        )}
+      <div style={{ marginBottom: "20px" }}>
+        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Estoque por Loja</h1>
+        <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Busque por marca, modelo, ano ou sexo</p>
       </div>
 
-      {loading && (
-        <div style={{ height: "3px", background: "var(--surface2)", borderRadius: "2px", marginBottom: "12px", overflow: "hidden" }}>
-          <div style={{ height: "100%", background: "var(--primary)", borderRadius: "2px", width: `${progresso}%`, transition: "width 0.4s ease" }} />
+      {/* Painel de busca */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", marginBottom: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+          <div>
+            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Marca</label>
+            <input placeholder="Ex: ZIANN, SALLO..." value={marcaBusca} onChange={e => setMarcaBusca(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
+          </div>
+          <div>
+            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Modelo</label>
+            <input placeholder="Ex: CALCA, CAMISETA..." value={modeloBusca} onChange={e => setModeloBusca(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
+          </div>
+          <div>
+            <label style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" }}>Ano</label>
+            <input placeholder="Ex: 2026" value={anoBusca} onChange={e => setAnoBusca(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && buscar()} style={inp} />
+          </div>
         </div>
-      )}
 
-      <FiltroGlobal opcoes={{ modelos, marcas, porAno, anos }} />
+        {/* Sexo */}
+        <div style={{ marginBottom: "12px" }}>
+          <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Sexo</div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {SEXOS.map(s => (
+              <Chip key={s} label={s} ativo={sexosSel.includes(s)}
+                onClick={() => setSexosSel(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+            ))}
+          </div>
+        </div>
 
+        {/* Lojas */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Loja</div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {LOJAS.map(l => (
+              <Chip key={l.id} label={l.nome} ativo={lojasSel.includes(l.id)}
+                onClick={() => setLojasSel(prev => prev.includes(l.id) ? prev.filter(x => x !== l.id) : [...prev, l.id])} />
+            ))}
+          </div>
+        </div>
+
+        {/* Botões */}
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={buscar} disabled={loading} style={{
+            padding: "10px 28px", background: "var(--primary)", color: "#fff",
+            border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer",
+            fontSize: "14px", fontWeight: 700, opacity: loading ? 0.7 : 1,
+          }}>
+            {loading ? "Buscando..." : "🔍 Buscar"}
+          </button>
+          {buscaFeita && (
+            <button onClick={limpar} style={{
+              padding: "10px 20px", background: "none", color: "var(--muted)",
+              border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px",
+            }}>
+              Limpar
+            </button>
+          )}
+          {grupos.length > 0 && (
+            <>
+              <button onClick={() => setExpandidos(new Set(grupos.map(([k]) => k)))}
+                style={{ padding: "10px 16px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+                Expandir todos
+              </button>
+              <button onClick={() => setExpandidos(new Set())}
+                style={{ padding: "10px 16px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+                Recolher todos
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* KPIs */}
       {dados.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px", marginBottom: "16px" }}>
           {[
@@ -214,11 +225,18 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {loading && dados.length === 0 ? (
-        <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-          <div style={{ fontSize: "24px", marginBottom: "12px" }}>⏳</div>Carregando estoque...
+      {/* Resultados */}
+      {!buscaFeita ? (
+        <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
+          <div style={{ fontSize: "40px", marginBottom: "16px" }}>📦</div>
+          <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text)", marginBottom: "8px" }}>Pronto para buscar</div>
+          <div style={{ fontSize: "13px", color: "var(--muted)" }}>Preencha os filtros acima e clique em Buscar</div>
         </div>
-      ) : grupos.length === 0 && !loading ? (
+      ) : loading ? (
+        <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
+          <div style={{ fontSize: "24px", marginBottom: "12px" }}>⏳</div>Buscando...
+        </div>
+      ) : grupos.length === 0 ? (
         <div style={{ padding: "48px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           Nenhum produto encontrado com esses filtros.
         </div>
@@ -231,11 +249,20 @@ export default function EstoquePage() {
               s + lojasFiltradas.reduce((ls, l) => ls + saldoReal(item[l.key]), 0), 0)
             return (
               <div key={key} style={{ background: "var(--surface)", border: `1px solid ${temCritico ? "var(--warning)" : "var(--border)"}`, borderRadius: "10px", overflow: "hidden" }}>
-                <div onClick={() => toggleExpandido(key)} style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: aberto ? "var(--surface2)" : "transparent", borderBottom: aberto ? "1px solid var(--border)" : "none" }}>
+                <div onClick={() => toggleExpandido(key)} style={{
+                  padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center",
+                  justifyContent: "space-between", gap: "12px",
+                  background: aberto ? "var(--surface2)" : "transparent",
+                  borderBottom: aberto ? "1px solid var(--border)" : "none",
+                }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "220px" }}>{grupo.produto}</div>
-                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "1px" }}>{grupo.cor} · {grupo.modelo} · {grupo.marca}</div>
+                      <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "220px" }}>
+                        {grupo.produto}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "1px" }}>
+                        {grupo.cor} · {grupo.modelo} · {grupo.marca}
+                      </div>
                     </div>
                     <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--surface2)", color: "var(--muted)", whiteSpace: "nowrap" }}>{grupo.sexo}</span>
