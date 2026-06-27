@@ -1,5 +1,6 @@
 "use client"
 import { useState, useMemo, useEffect, useRef, memo } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal, { LOJAS, FiltroState, filtroVazio, resolverColecoes } from "@/components/FiltroGlobal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
@@ -36,11 +37,10 @@ function useDebounce<T>(value: T, delay = 250): T {
 
 const thCell = { padding: "8px 12px", fontSize: "10px", fontWeight: 600 as const, color: "var(--muted)" as const, textTransform: "uppercase" as const, letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const, background: "var(--surface2)" as const, textAlign: "center" as const, borderBottom: "2px solid var(--border)" as const }
 
-// Linha de produto clicável — abre modal de detalhe
-const LinhaProduto = memo(({ prod, lojasFiltradas, onClick, mostrarMarca }: { prod: any, lojasFiltradas: typeof LOJAS, onClick: () => void, mostrarMarca?: boolean }) => {
+const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick: () => void, mostrarMarca?: boolean }) => {
   const st = prod.status
   return (
-    <div onClick={onClick} style={{ background: "var(--surface)", border: `1px solid ${["ZERADO","CRITICO"].includes(st.label) ? "var(--danger)" : "var(--border)"}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", transition: "all 0.1s" }}>
+    <div onClick={onClick} style={{ background: "var(--surface)", border: `1px solid ${["ZERADO","CRITICO"].includes(st.label) ? "var(--danger)" : "var(--border)"}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "260px" }}>{prod.produto}</div>
@@ -64,7 +64,6 @@ const LinhaProduto = memo(({ prod, lojasFiltradas, onClick, mostrarMarca }: { pr
 })
 LinhaProduto.displayName = "LinhaProduto"
 
-// Modal de detalhe por tamanho × loja
 function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltradas: typeof LOJAS, onClose: () => void }) {
   if (!prod) return null
   return (
@@ -131,6 +130,7 @@ export default function ComprasPage() {
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
   const [detalhe, setDetalhe] = useState<any>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const statusFiltroD = useDebounce(statusFiltro, 150)
 
@@ -158,7 +158,6 @@ export default function ComprasPage() {
     try {
       const res = await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
       let rows: any[] = await res.json()
-      // Multi-seleção filtrada no front
       if (filtros.sexos.length > 1)   rows = rows.filter(r => filtros.sexos.some(s => r.sexo?.includes(s)))
       if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
       if (filtros.marcas.length > 1)  rows = rows.filter(r => filtros.marcas.includes(r.marca))
@@ -169,7 +168,6 @@ export default function ComprasPage() {
     finally { setLoading(false) }
   }
 
-  // Agrupa SKUs por produto+cor, calcula total rede e status
   const produtos = useMemo(() => {
     const map: Record<string, any> = {}
     dados.forEach(row => {
@@ -216,6 +214,14 @@ export default function ComprasPage() {
     marcaSel === "GERAL" ? produtosStatus : produtosStatus.filter((p: any) => p.marca === marcaSel)
   , [produtosStatus, marcaSel])
 
+  // VIRTUALIZAÇÃO — só renderiza os produtos visíveis na viewport
+  const virtualizer = useVirtualizer({
+    count: produtosVisiveis.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,   // altura aproximada de cada linha + gap
+    overscan: 8,              // renderiza 8 extras acima/abaixo para scroll suave
+  })
+
   function exportar() {
     const p = new URLSearchParams()
     if (marcaSel !== "GERAL") p.set("marca", marcaSel)
@@ -239,7 +245,6 @@ export default function ComprasPage() {
 
       <FiltroGlobal filtros={filtros} setFiltros={setFiltros} onBuscar={buscar} loading={loading} mostrarSaldo />
 
-      {/* Status */}
       {produtos.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Status:</span>
@@ -287,17 +292,33 @@ export default function ComprasPage() {
             </div>
           </div>
 
-          {/* Lista de produtos clicáveis */}
+          {/* Lista virtualizada */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div style={{ background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "12px", padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "4px" }}>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "12px", padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
               <div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--primary)" }}>{marcaSel === "GERAL" ? "Todas as marcas" : marcaSel}</div>
                 <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>{produtosVisiveis.length} produtos · clique para ver detalhe por tamanho e loja</div>
               </div>
             </div>
-            {produtosVisiveis.map((prod: any, pi: number) => (
-              <LinhaProduto key={`${prod.produto}-${prod.cor}-${pi}`} prod={prod} lojasFiltradas={lojasFiltradas} mostrarMarca={marcaSel === "GERAL"} onClick={() => setDetalhe(prod)} />
-            ))}
+
+            {/* Container com scroll virtualizado */}
+            <div ref={scrollRef} style={{ height: "calc(100vh - 340px)", overflowY: "auto", paddingRight: "4px" }}>
+              <div style={{ height: `${virtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
+                {virtualizer.getVirtualItems().map(virtualRow => {
+                  const prod = produtosVisiveis[virtualRow.index]
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      ref={virtualizer.measureElement}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualRow.start}px)`, paddingBottom: "6px" }}
+                    >
+                      <LinhaProduto prod={prod} mostrarMarca={marcaSel === "GERAL"} onClick={() => setDetalhe(prod)} />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}

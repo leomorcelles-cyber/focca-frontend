@@ -1,8 +1,12 @@
 "use client"
 import { useState, useMemo, useRef } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal, { LOJAS, FiltroState, filtroVazio } from "@/components/FiltroGlobal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+
+function saldoFmt(v: any) { return Math.round(Number(v) || 0) }
+const limpaNome = (s: string) => s?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") || ""
 
 export default function TransferenciasPage() {
   const [filtros, setFiltros] = useState<FiltroState>({ ...filtroVazio })
@@ -10,13 +14,14 @@ export default function TransferenciasPage() {
   const [loading, setLoading] = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   async function buscar() {
     if (abortRef.current) abortRef.current.abort()
     abortRef.current = new AbortController()
     setDados([]); setLoading(true); setBuscaFeita(true)
 
-    const p = new URLSearchParams({ limite: "1000" })
+    const p = new URLSearchParams({ limite: "1500" })
     if (filtros.marcas.length === 1)  p.set("marca",  filtros.marcas[0])
     if (filtros.modelos.length === 1) p.set("modelo", filtros.modelos[0])
     if (filtros.sexos.length === 1)   p.set("sexo",   filtros.sexos[0])
@@ -26,12 +31,11 @@ export default function TransferenciasPage() {
       let rows: any[] = await res.json()
       if (filtros.marcas.length > 1)  rows = rows.filter(r => filtros.marcas.includes(r.marca))
       if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
-      // Filtro de loja: origem OU destino entre as selecionadas
       if (filtros.lojas.length > 0) {
-        const nomes = LOJAS.filter(l => filtros.lojas.includes(l.id)).map(l => l.nome.toUpperCase())
+        const nomes = LOJAS.filter(l => filtros.lojas.includes(l.id)).map(l => l.nome.toUpperCase().replace("P.NEREU","NEREU"))
         rows = rows.filter(r =>
-          nomes.some(n => r.loja_origem?.toUpperCase().includes(n.replace("P.NEREU","NEREU"))) ||
-          nomes.some(n => r.loja_destino?.toUpperCase().includes(n.replace("P.NEREU","NEREU")))
+          nomes.some(n => r.loja_origem?.toUpperCase().includes(n)) ||
+          nomes.some(n => r.loja_destino?.toUpperCase().includes(n))
         )
       }
       setDados(rows)
@@ -41,9 +45,17 @@ export default function TransferenciasPage() {
 
   const totalPecas = dados.reduce((acc, r) => acc + Number(r.qtd_sugerida_transferir || 0), 0)
 
+  const virtualizer = useVirtualizer({
+    count: dados.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 42,
+    overscan: 12,
+  })
+
   const th = (align: string, w?: string) => ({ padding: "9px 12px", textAlign: align as any, color: "var(--muted)" as const, fontWeight: 600 as const, fontSize: "10px" as const, textTransform: "uppercase" as const, letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const, minWidth: w })
-  const td = { padding: "8px 12px", overflow: "hidden" as const, textOverflow: "ellipsis" as const, whiteSpace: "nowrap" as const }
-  const limpaNome = (s: string) => s?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") || ""
+
+  // Grid de colunas fixo para alinhar header com linhas virtualizadas
+  const cols = "180px 90px 50px 120px 1fr 70px 1fr"
 
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
@@ -84,43 +96,48 @@ export default function TransferenciasPage() {
         <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>Nenhuma sugestão de transferência encontrada.</div>
       ) : (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-              <thead>
-                <tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
-                  <th style={th("left", "180px")}>PRODUTO</th>
-                  <th style={th("left", "90px")}>COR</th>
-                  <th style={th("center", "50px")}>TAM</th>
-                  <th style={th("left", "120px")}>MARCA</th>
-                  <th style={th("left", "120px")}>ORIGEM ↑</th>
-                  <th style={th("center", "70px")}>MOVER</th>
-                  <th style={th("left", "120px")}>DESTINO ↓</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dados.map((row, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "var(--surface2)18" }}>
-                    <td title={row.produto} style={{ ...td, fontWeight: 600, maxWidth: "180px" }}>{row.produto}</td>
-                    <td style={{ ...td, color: "var(--muted)" }}>{row.cor}</td>
-                    <td style={{ ...td, textAlign: "center", fontWeight: 700 }}>{row.tamanho}</td>
-                    <td title={row.marca} style={{ ...td, maxWidth: "120px" }}>{row.marca}</td>
-                    <td style={td}>
-                      <span style={{ color: "var(--success)", fontWeight: 600 }}>{limpaNome(row.loja_origem)}</span>
-                      <span style={{ fontSize: "10px", color: "var(--muted)", marginLeft: "4px" }}>({saldoFmt(row.saldo_origem)})</span>
-                    </td>
-                    <td style={{ ...td, textAlign: "center" }}>
-                      <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: 700, background: "var(--primary-light)", color: "var(--primary)" }}>
-                        {Math.round(Number(row.qtd_sugerida_transferir))}
-                      </span>
-                    </td>
-                    <td style={td}>
-                      <span style={{ color: "var(--danger)", fontWeight: 600 }}>{limpaNome(row.loja_destino)}</span>
-                      <span style={{ fontSize: "10px", color: "var(--muted)", marginLeft: "4px" }}>({saldoFmt(row.saldo_destino)})</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: "760px" }}>
+              {/* Header */}
+              <div style={{ display: "grid", gridTemplateColumns: cols, background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
+                <div style={th("left")}>PRODUTO</div>
+                <div style={th("left")}>COR</div>
+                <div style={th("center")}>TAM</div>
+                <div style={th("left")}>MARCA</div>
+                <div style={th("left")}>ORIGEM ↑</div>
+                <div style={th("center")}>MOVER</div>
+                <div style={th("left")}>DESTINO ↓</div>
+              </div>
+
+              {/* Linhas virtualizadas */}
+              <div ref={scrollRef} style={{ height: "calc(100vh - 380px)", overflowY: "auto" }}>
+                <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}>
+                  {virtualizer.getVirtualItems().map(vr => {
+                    const row = dados[vr.index]
+                    return (
+                      <div key={vr.key} data-index={vr.index} ref={virtualizer.measureElement}
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)`, display: "grid", gridTemplateColumns: cols, borderBottom: "1px solid var(--border)", background: vr.index % 2 === 0 ? "transparent" : "var(--surface2)18", fontSize: "12px", alignItems: "center" }}>
+                        <div title={row.produto} style={{ padding: "8px 12px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.produto}</div>
+                        <div style={{ padding: "8px 12px", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.cor}</div>
+                        <div style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700 }}>{row.tamanho}</div>
+                        <div title={row.marca} style={{ padding: "8px 12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.marca}</div>
+                        <div style={{ padding: "8px 12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span style={{ color: "var(--success)", fontWeight: 600 }}>{limpaNome(row.loja_origem)}</span>
+                          <span style={{ fontSize: "10px", color: "var(--muted)", marginLeft: "4px" }}>({saldoFmt(row.saldo_origem)})</span>
+                        </div>
+                        <div style={{ padding: "8px 12px", textAlign: "center" }}>
+                          <span style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: 700, background: "var(--primary-light)", color: "var(--primary)" }}>{saldoFmt(row.qtd_sugerida_transferir)}</span>
+                        </div>
+                        <div style={{ padding: "8px 12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span style={{ color: "var(--danger)", fontWeight: 600 }}>{limpaNome(row.loja_destino)}</span>
+                          <span style={{ fontSize: "10px", color: "var(--muted)", marginLeft: "4px" }}>({saldoFmt(row.saldo_destino)})</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
           <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", color: "var(--muted)", fontSize: "12px" }}>
             {dados.length} sugestões · {Number(totalPecas).toLocaleString("pt-BR")} peças a redistribuir
@@ -130,5 +147,3 @@ export default function TransferenciasPage() {
     </div>
   )
 }
-
-function saldoFmt(v: any) { return Math.round(Number(v) || 0) }
