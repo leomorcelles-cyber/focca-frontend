@@ -1,7 +1,8 @@
 "use client"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import FiltroGlobal, { FiltroState, filtroVazio } from "@/components/FiltroGlobal"
+import FiltroGlobal from "@/components/FiltroGlobal"
+import { useFiltros } from "@/components/FiltroContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -12,13 +13,20 @@ function corMargem(m: number) {
 }
 
 export default function MargemPage() {
-  const [filtros, setFiltros] = useState<FiltroState>({ ...filtroVazio })
+  const { filtros, versaoBusca } = useFiltros()
   const [ordem, setOrdem] = useState("lucro")
   const [dados, setDados] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const temFiltro = filtros.lojas.length || filtros.sexos.length || filtros.modelos.length ||
+      filtros.marcas.length || filtros.anos.length || filtros.colecoes.length
+    if (temFiltro) buscar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versaoBusca])
 
   async function buscar() {
     if (abortRef.current) abortRef.current.abort()
@@ -71,7 +79,7 @@ export default function MargemPage() {
         </select>
       </div>
 
-      <FiltroGlobal filtros={filtros} setFiltros={setFiltros} onBuscar={buscar} loading={loading} />
+      <FiltroGlobal onBuscar={buscar} loading={loading} />
 
       {dados.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px,1fr))", gap: "10px", marginBottom: "16px" }}>

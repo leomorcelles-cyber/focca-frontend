@@ -1,7 +1,8 @@
 "use client"
 import { useState, useMemo, useEffect, useRef, memo } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import FiltroGlobal, { LOJAS, FiltroState, filtroVazio, resolverColecoes } from "@/components/FiltroGlobal"
+import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
+import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -121,7 +122,7 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
 }
 
 export default function ComprasPage() {
-  const [filtros, setFiltros] = useState<FiltroState>({ ...filtroVazio })
+  const { filtros, versaoBusca } = useFiltros()
   const [statusFiltro, setStatusFiltro] = useState<string[]>([])
   const [dados, setDados] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -137,6 +138,14 @@ export default function ComprasPage() {
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
   }, [])
+
+  // Busca automaticamente ao entrar na pagina se houver filtros, e a cada nova busca global
+  useEffect(() => {
+    const temFiltro = filtros.lojas.length || filtros.sexos.length || filtros.modelos.length ||
+      filtros.marcas.length || filtros.anos.length || filtros.colecoes.length || filtros.saldoMax !== null
+    if (temFiltro) buscar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versaoBusca])
 
   const lojasFiltradas = useMemo(() =>
     filtros.lojas.length > 0 ? LOJAS.filter(l => filtros.lojas.includes(l.id)) : LOJAS
@@ -243,7 +252,7 @@ export default function ComprasPage() {
         {buscaFeita && <button onClick={exportar} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ Exportar CSV</button>}
       </div>
 
-      <FiltroGlobal filtros={filtros} setFiltros={setFiltros} onBuscar={buscar} loading={loading} mostrarSaldo />
+      <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
 
       {produtos.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>

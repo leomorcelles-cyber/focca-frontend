@@ -1,7 +1,8 @@
 "use client"
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import FiltroGlobal, { LOJAS, FiltroState, filtroVazio } from "@/components/FiltroGlobal"
+import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
+import { useFiltros } from "@/components/FiltroContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -9,12 +10,19 @@ function saldoFmt(v: any) { return Math.round(Number(v) || 0) }
 const limpaNome = (s: string) => s?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") || ""
 
 export default function TransferenciasPage() {
-  const [filtros, setFiltros] = useState<FiltroState>({ ...filtroVazio })
+  const { filtros, versaoBusca } = useFiltros()
   const [dados, setDados] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const temFiltro = filtros.lojas.length || filtros.sexos.length || filtros.modelos.length ||
+      filtros.marcas.length || filtros.anos.length || filtros.colecoes.length
+    if (temFiltro) buscar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versaoBusca])
 
   async function buscar() {
     if (abortRef.current) abortRef.current.abort()
@@ -64,7 +72,7 @@ export default function TransferenciasPage() {
         <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Lojas com excesso para lojas com baixo saldo do mesmo SKU</p>
       </div>
 
-      <FiltroGlobal filtros={filtros} setFiltros={setFiltros} onBuscar={buscar} loading={loading} />
+      <FiltroGlobal onBuscar={buscar} loading={loading} />
 
       {dados.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px", marginBottom: "16px" }}>
