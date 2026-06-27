@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -41,16 +41,15 @@ function corCelula(v: number) {
   return { bg: "transparent", color: "var(--text)", fw: 400 }
 }
 
-function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
+function Chip({ label, ativo, onClick, small, cor }: { label: string, ativo: boolean, onClick: () => void, small?: boolean, cor?: string }) {
   return (
     <button onClick={onClick} style={{
       padding: small ? "3px 10px" : "5px 12px",
       borderRadius: "20px", fontSize: small ? "11px" : "12px",
       cursor: "pointer", fontWeight: ativo ? 600 : 400,
-      border: "1px solid",
-      background: ativo ? "var(--primary)" : "var(--surface2)",
-      color: ativo ? "#fff" : "var(--text)",
-      borderColor: ativo ? "var(--primary)" : "var(--border)",
+      border: `1px solid ${cor || (ativo ? "var(--primary)" : "var(--border)")}`,
+      background: ativo ? (cor || "var(--primary)") : "var(--surface2)",
+      color: ativo ? "#fff" : (cor || "var(--text)"),
       transition: "all 0.1s", whiteSpace: "nowrap" as const,
     }}>{label}</button>
   )
@@ -66,6 +65,60 @@ const thCell = {
 
 const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
 const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "200px", display: "block" as const }
+
+// Componente de tabela de produtos — isolado para evitar re-renders
+function TabelaProduto({ prod, lojasFiltradas }: { prod: any, lojasFiltradas: typeof LOJAS }) {
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)" }}>{prod.produto}</span>
+          <span style={{ fontSize: "11px", color: "var(--muted)" }}>{prod.cor}</span>
+          <span style={{ fontSize: "10px", padding: "1px 7px", borderRadius: "20px", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>{prod.colecao}</span>
+          <span style={{ fontSize: "10px", padding: "1px 7px", borderRadius: "20px", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>{prod.sexo}</span>
+          {prod.marca && <span style={{ fontSize: "10px", padding: "1px 7px", borderRadius: "20px", background: "var(--primary-light)", border: "1px solid var(--primary)", color: "var(--primary)", fontWeight: 600 }}>{prod.marca}</span>}
+        </div>
+        {prod.preco > 0 && (
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div>
+            <div style={{ fontSize: "14px", fontWeight: 700 }}>R$ {prod.preco.toFixed(2)}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+          <thead>
+            <tr>
+              <th style={{ ...thCell, textAlign: "left", paddingLeft: "16px", minWidth: "60px" }}>TAM</th>
+              {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "75px" }}>{l.nome}</th>)}
+              <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "65px" }}>TOTAL</th>
+              <th style={{ ...thCell, minWidth: "80px" }}>STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {prod.itens.map((item: any, ii: number) => (
+              <tr key={ii} style={{ borderTop: "1px solid var(--border)", background: ii % 2 === 0 ? "transparent" : "var(--surface2)11" }}>
+                <td style={{ padding: "8px 12px 8px 16px", fontWeight: 700, fontSize: "13px" }}>{item.tamanho}</td>
+                {lojasFiltradas.map(l => {
+                  const val = saldoReal(item[l.key]); const c = corCelula(val)
+                  return (
+                    <td key={l.id} style={{ padding: "5px 8px", textAlign: "center" }}>
+                      <span style={{ display: "inline-block", minWidth: "36px", padding: "4px 10px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw, fontSize: "13px" }}>{val}</span>
+                    </td>
+                  )
+                })}
+                <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 700, color: "var(--primary)", borderLeft: "2px solid var(--border)", fontSize: "13px" }}>{item.totalReal}</td>
+                <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "4px", background: item.status.bg, color: item.status.cor }}>{item.status.label}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
 
 export default function ComprasPage() {
   const [lojasSel,    setLojasSel]    = useState<number[]>([])
@@ -86,22 +139,27 @@ export default function ComprasPage() {
   const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
   const [opAnos,    setOpAnos]    = useState<string[]>([])
 
+  // Estado dos dados — limpo a cada busca para evitar vazamento de memória
   const [dados,      setDados]      = useState<any[]>([])
   const [loading,    setLoading]    = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
-  const [marcaSel,   setMarcaSel]   = useState("")
+  const [marcaSel,   setMarcaSel]   = useState<string>("GERAL")
   const [filtrosAbertos, setFiltrosAbertos] = useState(true)
 
+  // Ref para cancelar fetches anteriores
+  const abortRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_URL}/filtros`).then(r => r.json()),
-      fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()),
-    ]).then(([f, c]) => {
+    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => {
       setOpModelos(f.modelos || [])
       setOpMarcas(f.marcas || [])
+    })
+    fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => {
       setOpPorAno(c.por_ano || {})
       setOpAnos(c.anos || [])
     })
+    // Limpa dados ao desmontar para liberar memória
+    return () => { setDados([]) }
   }, [])
 
   const estacoesDisp = useMemo(() => {
@@ -130,14 +188,14 @@ export default function ComprasPage() {
   const modelosVis = useMemo(() => {
     if (buscaModelo) return opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase()))
     const sel = opModelos.filter(m => modelosSel.includes(m))
-    const resto = opModelos.filter(m => !modelosSel.includes(m)).slice(0, 10 - sel.length)
+    const resto = opModelos.filter(m => !modelosSel.includes(m)).slice(0, Math.max(0, 10 - sel.length))
     return [...sel, ...resto]
   }, [opModelos, buscaModelo, modelosSel])
 
   const marcasVis = useMemo(() => {
     if (buscaMarca) return opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase()))
     const sel = opMarcas.filter(m => marcasSel.includes(m))
-    const resto = opMarcas.filter(m => !marcasSel.includes(m)).slice(0, 10 - sel.length)
+    const resto = opMarcas.filter(m => !marcasSel.includes(m)).slice(0, Math.max(0, 10 - sel.length))
     return [...sel, ...resto]
   }, [opMarcas, buscaMarca, marcasSel])
 
@@ -149,6 +207,10 @@ export default function ComprasPage() {
     setLojasSel([]); setSexosSel([]); setModelosSel([]); setMarcasSel([])
     setAnosSel([]); setEstacoesSel([]); setColecoesSel([]); setStatusFiltro([])
     setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao("")
+    // Limpa dados ao limpar filtros
+    setDados([])
+    setBuscaFeita(false)
+    setMarcaSel("GERAL")
   }
 
   const totalFiltros = lojasSel.length + sexosSel.length + modelosSel.length +
@@ -165,10 +227,15 @@ export default function ComprasPage() {
   const lojasFiltradas = lojasSel.length > 0 ? LOJAS.filter(l => lojasSel.includes(l.id)) : LOJAS
 
   async function buscar() {
+    // Cancela fetch anterior
+    if (abortRef.current) abortRef.current.abort()
+    abortRef.current = new AbortController()
+
+    // Limpa dados anteriores ANTES de buscar — evita acumular na memória
+    setDados([])
     setLoading(true)
     setBuscaFeita(true)
-    setDados([])
-    setMarcaSel("")
+    setMarcaSel("GERAL")
     setStatusFiltro([])
 
     const p = new URLSearchParams({ limite: "2000" })
@@ -179,22 +246,32 @@ export default function ComprasPage() {
       p.set("ano", anosSel[0])
 
     try {
-      const res = await fetch(`${API_URL}/matriz?${p}`)
-      let rows = await res.json()
+      const res = await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
+      let rows: any[] = await res.json()
+
+      // Filtros no frontend
       if (sexosSel.length > 1)   rows = rows.filter((r: any) => sexosSel.some(s => r.sexo?.includes(s)))
       if (modelosSel.length > 1) rows = rows.filter((r: any) => modelosSel.some(m => r.modelo?.includes(m)))
       if (marcasSel.length > 1)  rows = rows.filter((r: any) => marcasSel.includes(r.marca))
       if (colecoesAlvo.length)   rows = rows.filter((r: any) => colecoesAlvo.includes(r.colecao))
+
       setDados(rows)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch(e: any) {
+      if (e?.name !== "AbortError") console.error(e)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const dadosRich = useMemo(() => dados.map(row => {
-    const total = lojasFiltradas.reduce((s, l) => s + saldoReal(row[l.key]), 0)
-    return { ...row, totalReal: total, status: calcStatus(total) }
-  }), [dados, lojasFiltradas])
+  // Enriquece com status — calculado só uma vez
+  const dadosRich = useMemo(() => {
+    return dados.map(row => {
+      const total = lojasFiltradas.reduce((s, l) => s + saldoReal(row[l.key]), 0)
+      return { ...row, totalReal: total, status: calcStatus(total) }
+    })
+  }, [dados, lojasFiltradas])
 
+  // Filtro de status
   const dadosFiltrados = useMemo(() => {
     if (statusFiltro.length === 0) return dadosRich
     return dadosRich.filter(r => statusFiltro.includes(r.status.label))
@@ -206,12 +283,17 @@ export default function ComprasPage() {
     return c
   }, [dadosRich])
 
+  // Agrupa por marca
   const porMarca = useMemo(() => {
     const map: Record<string, Record<string, any>> = {}
     dadosFiltrados.forEach(row => {
       if (!map[row.marca]) map[row.marca] = {}
       const key = `${row.cod_produto}||${row.cor}`
-      if (!map[row.marca][key]) map[row.marca][key] = { produto: row.produto, cor: row.cor, modelo: row.modelo, colecao: row.colecao, sexo: row.sexo, preco: row.preco_venda || 0, itens: [] }
+      if (!map[row.marca][key]) map[row.marca][key] = {
+        produto: row.produto, cor: row.cor, modelo: row.modelo,
+        colecao: row.colecao, sexo: row.sexo, marca: row.marca,
+        preco: row.preco_venda || 0, itens: []
+      }
       map[row.marca][key].itens.push(row)
     })
     Object.values(map).forEach(prods => {
@@ -225,19 +307,28 @@ export default function ComprasPage() {
       })
     })
     return Object.entries(map).map(([marca, prods]) => ({
-      marca, produtos: Object.values(prods),
+      marca,
+      produtos: Object.values(prods),
       totalSKUs: Object.values(prods).reduce((s: number, p: any) => s + p.itens.length, 0),
-      criticos:  Object.values(prods).reduce((s: number, p: any) => s + p.itens.filter((i: any) => ["ZERADO","CRITICO"].includes(i.status.label)).length, 0),
+      criticos:  Object.values(prods).reduce((s: number, p: any) =>
+        s + p.itens.filter((i: any) => ["ZERADO","CRITICO"].includes(i.status.label)).length, 0),
     })).sort((a, b) => b.criticos - a.criticos || a.marca.localeCompare(b.marca))
   }, [dadosFiltrados])
 
-  const marcaAtiva = marcaSel && porMarca.find(m => m.marca === marcaSel)
-    ? marcaSel : porMarca[0]?.marca || ""
-  const dadosMarca = porMarca.find(m => m.marca === marcaAtiva)
+  // Produtos visíveis — GERAL mostra tudo, marca específica filtra
+  const produtosVisiveis = useMemo(() => {
+    if (marcaSel === "GERAL") {
+      // Agrupa todos os produtos de todas as marcas
+      const todos: any[] = []
+      porMarca.forEach(m => m.produtos.forEach(p => todos.push(p)))
+      return todos
+    }
+    return porMarca.find(m => m.marca === marcaSel)?.produtos || []
+  }, [porMarca, marcaSel])
 
   function exportarMarca() {
     const p = new URLSearchParams({ apenas_zerados: "false" })
-    if (marcaAtiva) p.set("marca", marcaAtiva)
+    if (marcaSel !== "GERAL") p.set("marca", marcaSel)
     window.open(`${API_URL}/export/faltantes?${p}`)
   }
 
@@ -250,9 +341,9 @@ export default function ComprasPage() {
             {dados.length > 0 ? `${dados.length} SKUs · ${porMarca.length} marcas` : "Selecione filtros e clique em Buscar"}
           </p>
         </div>
-        {marcaAtiva && (
+        {buscaFeita && (
           <button onClick={exportarMarca} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>
-            ⬇ CSV {marcaAtiva}
+            ⬇ CSV {marcaSel === "GERAL" ? "Geral" : marcaSel}
           </button>
         )}
       </div>
@@ -265,9 +356,7 @@ export default function ComprasPage() {
           </button>
           <div style={{ display: "flex", gap: "8px" }}>
             {totalFiltros > 0 && (
-              <button onClick={limparFiltros} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
-                ✕ Limpar
-              </button>
+              <button onClick={limparFiltros} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Limpar</button>
             )}
             <button onClick={buscar} disabled={loading} style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
               {loading ? "Buscando..." : "🔍 Buscar"}
@@ -332,7 +421,7 @@ export default function ComprasPage() {
 
       {/* Filtro status */}
       {dadosRich.length > 0 && (
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Status:</span>
           {STATUS_OPTS.map(opt => {
             const count = contagemStatus[opt.key] || 0
@@ -340,7 +429,7 @@ export default function ComprasPage() {
             const ativo = statusFiltro.includes(opt.key)
             return (
               <button key={opt.key} onClick={() => toggle(statusFiltro, opt.key, setStatusFiltro)} style={{
-                padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+                padding: "4px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
                 fontWeight: ativo ? 700 : 400, border: "1px solid",
                 background: ativo ? opt.cor : "var(--surface2)",
                 color: ativo ? "#fff" : opt.cor,
@@ -351,11 +440,12 @@ export default function ComprasPage() {
             )
           })}
           {statusFiltro.length > 0 && (
-            <button onClick={() => setStatusFiltro([])} style={{ padding: "5px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Todos</button>
+            <button onClick={() => setStatusFiltro([])} style={{ padding: "4px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Todos</button>
           )}
         </div>
       )}
 
+      {/* Conteúdo */}
       {!buscaFeita ? (
         <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontSize: "40px", marginBottom: "16px" }}>🛍️</div>
@@ -370,20 +460,38 @@ export default function ComprasPage() {
         <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>Nenhum produto encontrado.</div>
       ) : (
         <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-          {/* Sidebar */}
+
+          {/* Sidebar marcas */}
           <div style={{ width: "180px", flexShrink: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
             <div style={{ padding: "10px 14px", fontSize: "10px", fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "1px solid var(--border)", background: "var(--surface2)" }}>
               {porMarca.length} marcas
             </div>
             <div style={{ maxHeight: "calc(100vh - 420px)", overflowY: "auto" }}>
+              {/* Opção GERAL */}
+              <div onClick={() => setMarcaSel("GERAL")} style={{
+                padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)",
+                background: marcaSel === "GERAL" ? "var(--primary-light)" : "transparent",
+                borderLeft: `3px solid ${marcaSel === "GERAL" ? "var(--primary)" : "transparent"}`,
+              }}>
+                <div style={{ fontSize: "12px", fontWeight: marcaSel === "GERAL" ? 700 : 600, color: marcaSel === "GERAL" ? "var(--primary)" : "var(--text)" }}>
+                  Todas as marcas
+                </div>
+                <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+                  {dadosFiltrados.length} SKUs
+                </div>
+              </div>
+
+              {/* Lista de marcas */}
               {porMarca.map(({ marca, totalSKUs, criticos }) => (
                 <div key={marca} onClick={() => setMarcaSel(marca)} style={{
                   padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)",
-                  background: marcaAtiva === marca ? "var(--primary-light)" : "transparent",
-                  borderLeft: `3px solid ${marcaAtiva === marca ? "var(--primary)" : "transparent"}`,
+                  background: marcaSel === marca ? "var(--primary-light)" : "transparent",
+                  borderLeft: `3px solid ${marcaSel === marca ? "var(--primary)" : "transparent"}`,
                   transition: "all 0.1s",
                 }}>
-                  <div style={{ fontSize: "12px", fontWeight: marcaAtiva === marca ? 700 : 500, color: marcaAtiva === marca ? "var(--primary)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{marca}</div>
+                  <div style={{ fontSize: "12px", fontWeight: marcaSel === marca ? 700 : 500, color: marcaSel === marca ? "var(--primary)" : "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {marca}
+                  </div>
                   <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px", display: "flex", gap: "6px" }}>
                     <span>{totalSKUs} SKUs</span>
                     {criticos > 0 && <span style={{ color: "var(--danger)", fontWeight: 600 }}>⚠ {criticos}</span>}
@@ -395,72 +503,24 @@ export default function ComprasPage() {
 
           {/* Produtos */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
-            {dadosMarca && (
-              <>
-                <div style={{ background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "12px", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                  <div>
-                    <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--primary)" }}>{marcaAtiva}</div>
-                    <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>
-                      {dadosMarca.produtos.length} produtos · {dadosMarca.totalSKUs} SKUs
-                      {dadosMarca.criticos > 0 && <span style={{ color: "var(--danger)", fontWeight: 600, marginLeft: "8px" }}>⚠ {dadosMarca.criticos} críticos</span>}
-                    </div>
-                  </div>
-                  <button onClick={exportarMarca} style={{ padding: "6px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>⬇ CSV</button>
+            {/* Header da seleção */}
+            <div style={{ background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "12px", padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--primary)" }}>
+                  {marcaSel === "GERAL" ? "Todas as marcas" : marcaSel}
                 </div>
+                <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>
+                  {produtosVisiveis.length} produtos · {produtosVisiveis.reduce((s: number, p: any) => s + p.itens.length, 0)} SKUs
+                </div>
+              </div>
+              <button onClick={exportarMarca} style={{ padding: "6px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+                ⬇ CSV
+              </button>
+            </div>
 
-                {dadosMarca.produtos.map((prod: any, pi: number) => {
-                  const margem = prod.preco > 0 && prod.itens[0]?.preco_custo > 0
-                    ? ((prod.preco - prod.itens[0].preco_custo) / prod.preco * 100) : 0
-                  return (
-                    <div key={pi} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
-                      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)" }}>{prod.produto}</span>
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>{prod.cor}</span>
-                          <span style={{ fontSize: "10px", padding: "1px 7px", borderRadius: "20px", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>{prod.colecao}</span>
-                          <span style={{ fontSize: "10px", padding: "1px 7px", borderRadius: "20px", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>{prod.sexo}</span>
-                        </div>
-                        <div style={{ display: "flex", gap: "16px" }}>
-                          {margem > 0 && <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Margem</div><div style={{ fontSize: "14px", fontWeight: 700, color: margem >= 60 ? "var(--success)" : "var(--warning)" }}>{margem.toFixed(0)}%</div></div>}
-                          <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div><div style={{ fontSize: "14px", fontWeight: 700 }}>R$ {prod.preco.toFixed(2)}</div></div>
-                        </div>
-                      </div>
-                      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                          <thead>
-                            <tr>
-                              <th style={{ ...thCell, textAlign: "left", paddingLeft: "16px", minWidth: "60px" }}>TAM</th>
-                              {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "75px" }}>{l.nome}</th>)}
-                              <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "65px" }}>TOTAL</th>
-                              <th style={{ ...thCell, minWidth: "80px" }}>STATUS</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {prod.itens.map((item: any, ii: number) => (
-                              <tr key={ii} style={{ borderTop: "1px solid var(--border)", background: ii % 2 === 0 ? "transparent" : "var(--surface2)11" }}>
-                                <td style={{ padding: "8px 12px 8px 16px", fontWeight: 700, fontSize: "13px" }}>{item.tamanho}</td>
-                                {lojasFiltradas.map(l => {
-                                  const val = saldoReal(item[l.key]); const c = corCelula(val)
-                                  return (
-                                    <td key={l.id} style={{ padding: "5px 8px", textAlign: "center" }}>
-                                      <span style={{ display: "inline-block", minWidth: "36px", padding: "4px 10px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw, fontSize: "13px" }}>{val}</span>
-                                    </td>
-                                  )
-                                })}
-                                <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 700, color: "var(--primary)", borderLeft: "2px solid var(--border)", fontSize: "13px" }}>{item.totalReal}</td>
-                                <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                                  <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "4px", background: item.status.bg, color: item.status.cor }}>{item.status.label}</span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )
-                })}
-              </>
-            )}
+            {produtosVisiveis.map((prod: any, pi: number) => (
+              <TabelaProduto key={`${prod.produto}-${prod.cor}-${pi}`} prod={prod} lojasFiltradas={lojasFiltradas} />
+            ))}
           </div>
         </div>
       )}
