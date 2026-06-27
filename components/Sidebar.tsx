@@ -6,7 +6,6 @@ import { useState } from "react"
 
 const nav = [
   { href: "/",               label: "Visao Geral",      icon: "◈" },
-  { href: "/estoque",        label: "Estoque por Loja", icon: "⊞" },
   { href: "/compras",        label: "Compras",          icon: "↓" },
   { href: "/transferencias", label: "Transferencias",   icon: "⇄" },
   { href: "/analise",        label: "Analise de Vendas",icon: "↗" },
