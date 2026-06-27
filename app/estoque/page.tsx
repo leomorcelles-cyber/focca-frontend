@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -25,13 +25,22 @@ function corSaldo(v: number) {
   return { bg: "transparent", color: "var(--text)", fw: 400 }
 }
 
+// Debounce — espera parar de clicar antes de recalcular
+function useDebounce<T>(value: T, delay = 300): T {
+  const [v, setV] = useState<T>(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return v
+}
+
 function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
   return (
     <button onClick={onClick} style={{
-      padding: small ? "3px 10px" : "5px 12px",
-      borderRadius: "20px", fontSize: small ? "11px" : "12px",
-      cursor: "pointer", fontWeight: ativo ? 600 : 400,
-      border: "1px solid",
+      padding: small ? "3px 10px" : "5px 12px", borderRadius: "20px",
+      fontSize: small ? "11px" : "12px", cursor: "pointer",
+      fontWeight: ativo ? 600 : 400, border: "1px solid",
       background: ativo ? "var(--primary)" : "var(--surface2)",
       color: ativo ? "#fff" : "var(--text)",
       borderColor: ativo ? "var(--primary)" : "var(--border)",
@@ -40,58 +49,50 @@ function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean,
   )
 }
 
-const lbl = {
-  fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const,
-  textTransform: "uppercase" as const, letterSpacing: "0.5px",
-  marginBottom: "8px", display: "block" as const,
-}
-
-const inp = {
-  padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)",
-  fontSize: "12px", marginBottom: "8px", background: "var(--surface2)",
-  color: "var(--text)", outline: "none", width: "200px", display: "block" as const,
-}
+const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
+const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "200px", display: "block" as const }
 
 export default function EstoquePage() {
-  // Filtros — estado local, não dispara busca automaticamente
-  const [lojasSel,   setLojasSel]   = useState<number[]>([])
-  const [sexosSel,   setSexosSel]   = useState<string[]>([])
-  const [modelosSel, setModelosSel] = useState<string[]>([])
-  const [marcasSel,  setMarcasSel]  = useState<string[]>([])
-  const [anosSel,    setAnosSel]    = useState<string[]>([])
-  const [estacoesSel,setEstacoesSel]= useState<string[]>([])
-  const [colecoesSel,setColecoesSel]= useState<string[]>([])
+  const [lojasSel,    setLojasSel]    = useState<number[]>([])
+  const [sexosSel,    setSexosSel]    = useState<string[]>([])
+  const [modelosSel,  setModelosSel]  = useState<string[]>([])
+  const [marcasSel,   setMarcasSel]   = useState<string[]>([])
+  const [anosSel,     setAnosSel]     = useState<string[]>([])
+  const [estacoesSel, setEstacoesSel] = useState<string[]>([])
+  const [colecoesSel, setColecoesSel] = useState<string[]>([])
 
   const [buscaModelo,  setBuscaModelo]  = useState("")
   const [buscaMarca,   setBuscaMarca]   = useState("")
   const [buscaColecao, setBuscaColecao] = useState("")
 
-  // Opções carregadas uma vez
-  const [opModelos,  setOpModelos]  = useState<string[]>([])
-  const [opMarcas,   setOpMarcas]   = useState<string[]>([])
-  const [opPorAno,   setOpPorAno]   = useState<Record<string,string[]>>({})
-  const [opAnos,     setOpAnos]     = useState<string[]>([])
+  const [opModelos, setOpModelos] = useState<string[]>([])
+  const [opMarcas,  setOpMarcas]  = useState<string[]>([])
+  const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
+  const [opAnos,    setOpAnos]    = useState<string[]>([])
 
-  // Resultados
   const [dados,      setDados]      = useState<any[]>([])
   const [loading,    setLoading]    = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
   const [filtrosAbertos, setFiltrosAbertos] = useState(true)
 
+  const abortRef = useRef<AbortController | null>(null)
+
+  // Debounce das lojas — evita recalcular a cada clique
+  const lojasSelD = useDebounce(lojasSel, 200)
+
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_URL}/filtros`).then(r => r.json()),
-      fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()),
-    ]).then(([f, c]) => {
+    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => {
       setOpModelos(f.modelos || [])
       setOpMarcas(f.marcas || [])
+    })
+    fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => {
       setOpPorAno(c.por_ano || {})
       setOpAnos(c.anos || [])
     })
+    return () => { setDados([]) }
   }, [])
 
-  // Coleções disponíveis pelos anos+estações selecionados
   const estacoesDisp = useMemo(() => {
     if (!anosSel.length) return []
     const cols = anosSel.flatMap(a => opPorAno[a] || [])
@@ -118,14 +119,14 @@ export default function EstoquePage() {
   const modelosVis = useMemo(() => {
     if (buscaModelo) return opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase()))
     const sel = opModelos.filter(m => modelosSel.includes(m))
-    const resto = opModelos.filter(m => !modelosSel.includes(m)).slice(0, 10 - sel.length)
+    const resto = opModelos.filter(m => !modelosSel.includes(m)).slice(0, Math.max(0, 10 - sel.length))
     return [...sel, ...resto]
   }, [opModelos, buscaModelo, modelosSel])
 
   const marcasVis = useMemo(() => {
     if (buscaMarca) return opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase()))
     const sel = opMarcas.filter(m => marcasSel.includes(m))
-    const resto = opMarcas.filter(m => !marcasSel.includes(m)).slice(0, 10 - sel.length)
+    const resto = opMarcas.filter(m => !marcasSel.includes(m)).slice(0, Math.max(0, 10 - sel.length))
     return [...sel, ...resto]
   }, [opMarcas, buscaMarca, marcasSel])
 
@@ -133,16 +134,16 @@ export default function EstoquePage() {
     setter(set.includes(val) ? set.filter(x => x !== val) : [...set, val])
   }
 
-  function limparFiltros() {
+  function limpar() {
     setLojasSel([]); setSexosSel([]); setModelosSel([]); setMarcasSel([])
     setAnosSel([]); setEstacoesSel([]); setColecoesSel([])
     setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao("")
+    setDados([]); setBuscaFeita(false); setExpandidos(new Set())
   }
 
   const totalFiltros = lojasSel.length + sexosSel.length + modelosSel.length +
     marcasSel.length + anosSel.length + estacoesSel.length + colecoesSel.length
 
-  // Coleções alvo para a query
   const colecoesAlvo = useMemo(() => {
     if (colecoesSel.length > 0) return colecoesSel
     if (!anosSel.length) return []
@@ -152,10 +153,9 @@ export default function EstoquePage() {
   }, [colecoesSel, anosSel, estacoesSel, opPorAno])
 
   async function buscar() {
-    setLoading(true)
-    setBuscaFeita(true)
-    setDados([])
-    setExpandidos(new Set())
+    if (abortRef.current) abortRef.current.abort()
+    abortRef.current = new AbortController()
+    setDados([]); setLoading(true); setBuscaFeita(true); setExpandidos(new Set())
 
     const p = new URLSearchParams({ limite: "1000" })
     if (marcasSel.length === 1)  p.set("marca",  marcasSel[0])
@@ -165,27 +165,32 @@ export default function EstoquePage() {
       p.set("ano", anosSel[0])
 
     try {
-      const res = await fetch(`${API_URL}/matriz?${p}`)
-      let rows = await res.json()
-
-      // Filtros no frontend
+      const res = await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
+      let rows: any[] = await res.json()
       if (sexosSel.length > 1)   rows = rows.filter((r: any) => sexosSel.some(s => r.sexo?.includes(s)))
       if (modelosSel.length > 1) rows = rows.filter((r: any) => modelosSel.some(m => r.modelo?.includes(m)))
       if (marcasSel.length > 1)  rows = rows.filter((r: any) => marcasSel.includes(r.marca))
       if (colecoesAlvo.length)   rows = rows.filter((r: any) => colecoesAlvo.includes(r.colecao))
-
       setDados(rows)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch(e: any) {
+      if (e?.name !== "AbortError") console.error(e)
+    } finally { setLoading(false) }
   }
 
-  const lojasFiltradas = lojasSel.length > 0 ? LOJAS.filter(l => lojasSel.includes(l.id)) : LOJAS
+  // Lojas filtradas com debounce — evita recalcular enquanto clica
+  const lojasFiltradas = useMemo(() =>
+    lojasSelD.length > 0 ? LOJAS.filter(l => lojasSelD.includes(l.id)) : LOJAS
+  , [lojasSelD])
 
+  // Grupos — só recalcula quando dados mudam (não quando muda lojas)
   const grupos = useMemo(() => {
     const map: Record<string, any> = {}
     dados.forEach(row => {
       const key = `${row.cod_produto}-${row.cor}`
-      if (!map[key]) map[key] = { produto: row.produto, cor: row.cor, modelo: row.modelo, marca: row.marca, colecao: row.colecao, sexo: row.sexo, itens: [] }
+      if (!map[key]) map[key] = {
+        produto: row.produto, cor: row.cor, modelo: row.modelo,
+        marca: row.marca, colecao: row.colecao, sexo: row.sexo, itens: []
+      }
       map[key].itens.push(row)
     })
     Object.values(map).forEach((g: any) => {
@@ -216,56 +221,50 @@ export default function EstoquePage() {
         </div>
         {grupos.length > 0 && (
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => setExpandidos(new Set(grupos.map(([k]) => k)))} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>Expandir todos</button>
-            <button onClick={() => setExpandidos(new Set())} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>Recolher todos</button>
+            <button onClick={() => setExpandidos(new Set(grupos.map(([k]) => k)))}
+              style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+              Expandir todos
+            </button>
+            <button onClick={() => setExpandidos(new Set())}
+              style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+              Recolher todos
+            </button>
           </div>
         )}
       </div>
 
       {/* Painel de filtros */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "16px", overflow: "hidden" }}>
-        {/* Header do painel */}
         <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: filtrosAbertos ? "1px solid var(--border)" : "none", background: "var(--surface2)" }}>
           <button onClick={() => setFiltrosAbertos(!filtrosAbertos)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "var(--text)", display: "flex", alignItems: "center", gap: "8px" }}>
             {filtrosAbertos ? "▲" : "▼"} Filtros {totalFiltros > 0 ? `· ${totalFiltros} ativos` : ""}
           </button>
           <div style={{ display: "flex", gap: "8px" }}>
             {totalFiltros > 0 && (
-              <button onClick={limparFiltros} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
-                ✕ Limpar ({totalFiltros})
+              <button onClick={limpar} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+                ✕ Limpar
               </button>
             )}
-            <button onClick={buscar} disabled={loading} style={{
-              padding: "8px 20px", background: "var(--primary)", color: "#fff",
-              border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer",
-              fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1,
-            }}>
+            <button onClick={buscar} disabled={loading} style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
               {loading ? "Buscando..." : "🔍 Buscar"}
             </button>
           </div>
         </div>
 
-        {/* Filtros */}
         {filtrosAbertos && (
           <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
-
-            {/* Loja */}
             <div>
               <label style={lbl}>Loja {lojasSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {lojasSel.length} sel.</span>}</label>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={lojasSel.includes(l.id)} onClick={() => toggle(lojasSel, l.id, setLojasSel)} />)}
               </div>
             </div>
-
-            {/* Sexo */}
             <div>
               <label style={lbl}>Sexo {sexosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {sexosSel.length} sel.</span>}</label>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {SEXOS.map(s => <Chip key={s} label={s} ativo={sexosSel.includes(s)} onClick={() => toggle(sexosSel, s, setSexosSel)} />)}
               </div>
             </div>
-
-            {/* Modelo */}
             <div>
               <label style={lbl}>Modelo {modelosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {modelosSel.length} sel.</span>}</label>
               <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
@@ -273,8 +272,6 @@ export default function EstoquePage() {
                 {modelosVis.map(m => <Chip key={m} label={m} small ativo={modelosSel.includes(m)} onClick={() => toggle(modelosSel, m, setModelosSel)} />)}
               </div>
             </div>
-
-            {/* Marca */}
             <div>
               <label style={lbl}>Marca {marcasSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {marcasSel.length} sel.</span>}</label>
               <input placeholder={`Buscar entre ${opMarcas.length} marcas...`} value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
@@ -282,16 +279,12 @@ export default function EstoquePage() {
                 {marcasVis.map(m => <Chip key={m} label={m} small ativo={marcasSel.includes(m)} onClick={() => toggle(marcasSel, m, setMarcasSel)} />)}
               </div>
             </div>
-
-            {/* Ano */}
             <div>
               <label style={lbl}>Ano {anosSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {anosSel.length} sel.</span>}</label>
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {opAnos.map(a => <Chip key={a} label={a} small ativo={anosSel.includes(a)} onClick={() => { toggle(anosSel, a, setAnosSel); setEstacoesSel([]); setColecoesSel([]) }} />)}
               </div>
             </div>
-
-            {/* Estação */}
             {anosSel.length > 0 && (
               <div>
                 <label style={lbl}>Estação {estacoesSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {estacoesSel.length} sel.</span>}</label>
@@ -300,8 +293,6 @@ export default function EstoquePage() {
                 </div>
               </div>
             )}
-
-            {/* Coleção */}
             {anosSel.length > 0 && (
               <div>
                 <label style={lbl}>Coleção {colecoesSel.length > 0 && <span style={{ color: "var(--primary)" }}>· {colecoesSel.length} sel.</span>}</label>
@@ -311,7 +302,6 @@ export default function EstoquePage() {
                 </div>
               </div>
             )}
-
           </div>
         )}
       </div>
@@ -337,8 +327,8 @@ export default function EstoquePage() {
       {!buscaFeita ? (
         <div style={{ padding: "60px 20px", textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontSize: "40px", marginBottom: "16px" }}>📦</div>
-          <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text)", marginBottom: "8px" }}>Selecione os filtros e clique em Buscar</div>
-          <div style={{ fontSize: "13px", color: "var(--muted)" }}>Você pode buscar por marca, modelo, ano, coleção ou loja</div>
+          <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text)", marginBottom: "8px" }}>Selecione filtros e clique em Buscar</div>
+          <div style={{ fontSize: "13px", color: "var(--muted)" }}>Filtre por marca, modelo, ano, coleção ou loja</div>
         </div>
       ) : loading ? (
         <div style={{ padding: "60px", textAlign: "center", color: "var(--muted)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
@@ -353,7 +343,8 @@ export default function EstoquePage() {
           {grupos.map(([key, grupo]: [string, any]) => {
             const aberto = expandidos.has(key)
             const temCritico = grupo.itens.some((item: any) => lojasFiltradas.some(l => saldoReal(item[l.key]) <= 2))
-            const totalGrupo = grupo.itens.reduce((s: number, item: any) => s + lojasFiltradas.reduce((ls, l) => ls + saldoReal(item[l.key]), 0), 0)
+            const totalGrupo = grupo.itens.reduce((s: number, item: any) =>
+              s + lojasFiltradas.reduce((ls, l) => ls + saldoReal(item[l.key]), 0), 0)
             return (
               <div key={key} style={{ background: "var(--surface)", border: `1px solid ${temCritico ? "var(--warning)" : "var(--border)"}`, borderRadius: "10px", overflow: "hidden" }}>
                 <div onClick={() => toggleExpandido(key)} style={{ padding: "10px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: aberto ? "var(--surface2)" : "transparent", borderBottom: aberto ? "1px solid var(--border)" : "none" }}>
