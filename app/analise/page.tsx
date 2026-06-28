@@ -253,7 +253,7 @@ function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => strin
             <XAxis dataKey="tamanho" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
             <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
-              formatter={(v: any, name: string) => name === "qtd_vendida" ? [Number(v).toLocaleString("pt-BR"), "Qtd"] : [v, name]} />
+              formatter={(v: any) => [Number(v).toLocaleString("pt-BR"), "Qtd vendida"]} />
             <Bar dataKey="qtd_vendida" fill="var(--primary)" radius={[4,4,0,0]} />
           </BarChart>
         </ResponsiveContainer>
