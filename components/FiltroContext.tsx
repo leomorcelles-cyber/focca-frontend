@@ -6,6 +6,7 @@ export type FiltroState = {
   lojas: number[]
   sexos: string[]
   modelos: string[]
+  produtos: string[]   // NOVO: produtos (descricao_basica), multi-selecao
   marcas: string[]
   anos: string[]
   estacoes: string[]
@@ -14,14 +15,13 @@ export type FiltroState = {
 }
 
 export const filtroVazio: FiltroState = {
-  lojas: [], sexos: [], modelos: [], marcas: [],
+  lojas: [], sexos: [], modelos: [], produtos: [], marcas: [],
   anos: [], estacoes: [], colecoes: [], saldoMax: null,
 }
 
 type FiltroContextType = {
   filtros: FiltroState
   setFiltros: (f: FiltroState) => void
-  // Quantas buscas já foram disparadas — incrementa a cada busca para sinalizar páginas
   versaoBusca: number
   dispararBusca: () => void
 }
@@ -47,7 +47,6 @@ export function useFiltros() {
   return ctx
 }
 
-// Helper: resolve coleções alvo a partir de ano/estação/coleção
 export function resolverColecoes(filtros: FiltroState, opPorAno: Record<string,string[]>): string[] {
   if (filtros.colecoes.length > 0) return filtros.colecoes
   if (!filtros.anos.length) return []

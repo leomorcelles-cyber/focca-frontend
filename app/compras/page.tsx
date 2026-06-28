@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, memo } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import { useSelecao, chaveItem } from "@/components/SelecaoContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -66,60 +67,106 @@ const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick
 LinhaProduto.displayName = "LinhaProduto"
 
 function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltradas: typeof LOJAS, onClose: () => void }) {
+  const { toggle, temItem } = useSelecao()
+  const [grade, setGrade] = useState<any[]>([])
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    if (!prod) return
+    setCarregando(true)
+    const p = new URLSearchParams({ produto: prod.produto })
+    if (prod.cor) p.set("cor", prod.cor)
+    fetch(`${API_URL}/produto/grade?${p}`)
+      .then(r => r.json())
+      .then(g => setGrade(Array.isArray(g) ? g : []))
+      .catch(() => setGrade([]))
+      .finally(() => setCarregando(false))
+  }, [prod])
+
   if (!prod) return null
+
+  // Ordena por tamanho
+  const gradeOrd = [...grade].sort((a, b) => {
+    const ia = ORDEM_TAM.indexOf(a.tamanho), ib = ORDEM_TAM.indexOf(b.tamanho)
+    if (ia === -1 && ib === -1) return String(a.tamanho).localeCompare(String(b.tamanho))
+    if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib
+  })
+
+  // Monta item do carrinho a partir de uma linha da grade
+  function itemDe(linha: any) {
+    const lojas: Record<string, number> = {}
+    LOJAS.forEach(l => { lojas[String(l.id)] = saldoReal(linha.lojas?.[String(l.id)]) })
+    const totalRede = Object.values(lojas).reduce((s, v) => s + v, 0)
+    return { cod_produto: linha.cod_produto, produto: linha.produto, cor: linha.cor, tamanho: linha.tamanho, modelo: linha.modelo, marca: linha.marca, colecao: linha.colecao, lojas, totalRede }
+  }
+
+  const todosMarcados = gradeOrd.length > 0 && gradeOrd.every(l => temItem(chaveItem({ cod_produto: l.cod_produto, cor: l.cor, tamanho: l.tamanho })))
+
+  function toggleTodos() {
+    if (todosMarcados) {
+      gradeOrd.forEach(l => { const it = itemDe(l); if (temItem(chaveItem(it))) toggle(it) })
+    } else {
+      gradeOrd.forEach(l => { const it = itemDe(l); if (!temItem(chaveItem(it))) toggle(it) })
+    }
+  }
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "14px", maxWidth: "800px", width: "100%", maxHeight: "85vh", overflow: "auto", border: "1px solid var(--border)" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "14px", maxWidth: "860px", width: "100%", maxHeight: "85vh", overflow: "auto", border: "1px solid var(--border)" }}>
         <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "sticky", top: 0, background: "var(--surface)", zIndex: 1 }}>
           <div>
             <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{prod.produto}</div>
             <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "3px" }}>{prod.cor} · {prod.modelo} · {prod.marca} · {prod.colecao}</div>
+            <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "4px" }}>Marque os tamanhos para adicionar à seleção de análise</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "22px", cursor: "pointer", color: "var(--muted)", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ padding: "18px 22px" }}>
-          <div style={{ display: "flex", gap: "12px", marginBottom: "18px", flexWrap: "wrap" }}>
-            {prod.preco > 0 && <div style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 14px" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço venda</div><div style={{ fontSize: "16px", fontWeight: 700 }}>R$ {prod.preco.toFixed(2)}</div></div>}
-            <div style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 14px" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Total rede</div><div style={{ fontSize: "16px", fontWeight: 700, color: "var(--primary)" }}>{prod.totalRede}</div></div>
-            <div style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 14px" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Tamanhos</div><div style={{ fontSize: "16px", fontWeight: 700 }}>{prod.itens.length}</div></div>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-              <thead><tr>
-                <th style={{ ...thCell, textAlign: "left", paddingLeft: "12px", minWidth: "55px" }}>TAM</th>
-                {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "70px" }}>{l.nome}</th>)}
-                <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "60px" }}>TOTAL</th>
-              </tr></thead>
-              <tbody>
-                {prod.itens.map((item: any, ii: number) => {
-                  const totalLinha = lojasFiltradas.reduce((s, l) => s + saldoReal(item[l.key]), 0)
-                  return (
-                    <tr key={ii} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "8px 12px", fontWeight: 700, fontSize: "13px" }}>{item.tamanho}</td>
-                      {lojasFiltradas.map(l => { const v = saldoReal(item[l.key]); const c = corCelula(v); return (
-                        <td key={l.id} style={{ padding: "5px 8px", textAlign: "center" }}>
-                          <span style={{ display: "inline-block", minWidth: "34px", padding: "4px 8px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw }}>{v}</span>
+          {carregando ? (
+            <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Carregando grade completa...</div>
+          ) : gradeOrd.length === 0 ? (
+            <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Grade não encontrada.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <thead><tr>
+                  <th style={{ ...thCell, textAlign: "center", width: "44px" }}>
+                    <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} title="Selecionar todos" />
+                  </th>
+                  <th style={{ ...thCell, textAlign: "left", paddingLeft: "12px", minWidth: "55px" }}>TAM</th>
+                  {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "70px" }}>{l.nome}</th>)}
+                  <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "60px" }}>TOTAL</th>
+                </tr></thead>
+                <tbody>
+                  {gradeOrd.map((linha, ii) => {
+                    const it = itemDe(linha)
+                    const marcado = temItem(chaveItem(it))
+                    const totalLinha = it.totalRede || 0
+                    return (
+                      <tr key={ii} style={{ borderTop: "1px solid var(--border)", background: marcado ? "var(--primary-light)" : "transparent", cursor: "pointer" }} onClick={() => toggle(it)}>
+                        <td style={{ padding: "8px", textAlign: "center" }}>
+                          <input type="checkbox" checked={marcado} onChange={() => toggle(it)} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} />
                         </td>
-                      )})}
-                      <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 700, color: "var(--primary)", borderLeft: "2px solid var(--border)" }}>{totalLinha}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot><tr style={{ borderTop: "2px solid var(--border)" }}>
-                <td style={{ padding: "8px 12px", fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>TOTAL</td>
-                {lojasFiltradas.map(l => { const t = prod.itens.reduce((s: number, item: any) => s + saldoReal(item[l.key]), 0); return (
-                  <td key={l.id} style={{ padding: "8px", textAlign: "center", fontWeight: 700, color: t === 0 ? "var(--danger)" : "var(--text)" }}>{t}</td>
-                )})}
-                <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: "var(--primary)", borderLeft: "2px solid var(--border)" }}>{prod.totalRede}</td>
-              </tr></tfoot>
-            </table>
-          </div>
+                        <td style={{ padding: "8px 12px", fontWeight: 700, fontSize: "13px" }}>{linha.tamanho}</td>
+                        {lojasFiltradas.map(l => { const v = saldoReal(linha.lojas?.[String(l.id)]); const c = corCelula(v); return (
+                          <td key={l.id} style={{ padding: "5px 8px", textAlign: "center" }}>
+                            <span style={{ display: "inline-block", minWidth: "34px", padding: "4px 8px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw }}>{v}</span>
+                          </td>
+                        )})}
+                        <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 700, color: totalLinha === 0 ? "var(--danger)" : "var(--primary)", borderLeft: "2px solid var(--border)" }}>{totalLinha}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
 
 export default function ComprasPage() {
   const { filtros, versaoBusca } = useFiltros()

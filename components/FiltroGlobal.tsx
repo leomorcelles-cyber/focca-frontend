@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useFiltros, FiltroState, filtroVazio } from "@/components/FiltroContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
@@ -31,11 +31,7 @@ function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean,
 const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
 const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "100%", display: "block" as const }
 
-type Props = {
-  onBuscar: () => void
-  loading?: boolean
-  mostrarSaldo?: boolean
-}
+type Props = { onBuscar: () => void, loading?: boolean, mostrarSaldo?: boolean }
 
 export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props) {
   const { filtros, setFiltros, dispararBusca } = useFiltros()
@@ -44,23 +40,34 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const [opMarcas,  setOpMarcas]  = useState<string[]>([])
   const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
   const [opAnos,    setOpAnos]    = useState<string[]>([])
+
   const [buscaModelo,  setBuscaModelo]  = useState("")
   const [buscaMarca,   setBuscaMarca]   = useState("")
   const [buscaColecao, setBuscaColecao] = useState("")
+  const [buscaProduto, setBuscaProduto] = useState("")
+  const [resProdutos,  setResProdutos]  = useState<string[]>([])  // resultados da busca server-side
   const [aberto, setAberto] = useState(true)
+  const prodTimer = useRef<any>(null)
 
   useEffect(() => {
     fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => { setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []) }).catch(() => {})
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
   }, [])
 
+  // Busca de produtos server-side (debounce 300ms)
+  useEffect(() => {
+    if (prodTimer.current) clearTimeout(prodTimer.current)
+    if (!buscaProduto || buscaProduto.trim().length < 2) { setResProdutos([]); return }
+    prodTimer.current = setTimeout(() => {
+      fetch(`${API_URL}/produtos/buscar?q=${encodeURIComponent(buscaProduto.trim())}&limite=30`)
+        .then(r => r.json()).then(r => setResProdutos(Array.isArray(r) ? r : [])).catch(() => setResProdutos([]))
+    }, 300)
+    return () => { if (prodTimer.current) clearTimeout(prodTimer.current) }
+  }, [buscaProduto])
+
   function up(patch: Partial<FiltroState>) { setFiltros({ ...filtros, ...patch }) }
   function toggle<T>(arr: T[], val: T): T[] { return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] }
-
-  function handleBuscar() {
-    dispararBusca()  // sinaliza outras páginas que houve nova busca
-    onBuscar()
-  }
+  function handleBuscar() { dispararBusca(); onBuscar() }
 
   const estacoesDisp = useMemo(() => {
     if (!filtros.anos.length) return []
@@ -96,13 +103,23 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     return opMarcas.filter(m => filtros.marcas.includes(m))
   }, [opMarcas, buscaMarca, filtros.marcas])
 
+  // Produtos visiveis: os selecionados + resultados da busca server-side
+  const produtosVis = useMemo(() => {
+    const sel = filtros.produtos
+    if (buscaProduto && resProdutos.length) {
+      const novos = resProdutos.filter(p => !sel.includes(p))
+      return [...sel, ...novos]
+    }
+    return sel
+  }, [filtros.produtos, resProdutos, buscaProduto])
+
   const totalFiltros = filtros.lojas.length + filtros.sexos.length + filtros.modelos.length +
-    filtros.marcas.length + filtros.anos.length + filtros.estacoes.length + filtros.colecoes.length +
-    (filtros.saldoMax !== null ? 1 : 0)
+    filtros.produtos.length + filtros.marcas.length + filtros.anos.length + filtros.estacoes.length +
+    filtros.colecoes.length + (filtros.saldoMax !== null ? 1 : 0)
 
   function limpar() {
     setFiltros({ ...filtroVazio })
-    setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao("")
+    setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao(""); setBuscaProduto(""); setResProdutos([])
   }
 
   return (
@@ -133,6 +150,19 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
               {SEXOS.map(s => <Chip key={s} label={s} ativo={filtros.sexos.includes(s)} onClick={() => up({ sexos: toggle(filtros.sexos, s) })} />)}
             </div>
           </div>
+
+          {/* PRODUTO — novo, multi-selecao com busca server-side */}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={lbl}>Produto {filtros.produtos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.produtos.length} selecionados</span>}</label>
+            <input placeholder="Digite para buscar entre 7.801 produtos (ex: JAQUETA, CALCA SKINNY...)" value={buscaProduto} onChange={e => setBuscaProduto(e.target.value)} style={inp} />
+            {produtosVis.length > 0 && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", maxHeight: "140px", overflowY: "auto" }}>
+                {produtosVis.map(p => <Chip key={p} label={p} small ativo={filtros.produtos.includes(p)} onClick={() => up({ produtos: toggle(filtros.produtos, p) })} />)}
+              </div>
+            )}
+            {buscaProduto.length >= 2 && resProdutos.length === 0 && <span style={{ fontSize: "11px", color: "var(--muted)" }}>Nenhum produto encontrado</span>}
+          </div>
+
           <div>
             <label style={lbl}>Modelo {filtros.modelos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.modelos.length}</span>}</label>
             <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
