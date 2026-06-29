@@ -63,12 +63,12 @@ export default function RelatorioPage() {
         return fresco ? { ...it, lojas: fresco.lojas, totalRede: fresco.totalRede, preco_venda: fresco.preco_venda } : it
       })
 
-      // Busca VENDAS aproximadas (nucleo do nome + colecao + cor) — Microvix nao tem chave exata
+      // Busca VENDAS por match EXATO de atributos (backend resolve pelos cod_produto)
       fetch(`${API_URL}/carrinho/vendas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itens: atualizados.map(it => ({ produto: it.produto, cor: it.cor, colecao: it.colecao, tamanho: it.tamanho })),
+          itens: atualizados.map(it => ({ cod_produto: it.cod_produto, produto: it.produto, cor: it.cor, colecao: it.colecao, tamanho: it.tamanho })),
           dias: 365,
         }),
       }).then(r => r.json()).then(vend => {
@@ -401,7 +401,7 @@ export default function RelatorioPage() {
             {itens.length > 0 && (
               <div style={{ ...card, borderColor: "var(--primary)" }}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "4px" }}>Itens Selecionados para Análise</h2>
-                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, aprox. por nome+coleção) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, match exato por atributos) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>
