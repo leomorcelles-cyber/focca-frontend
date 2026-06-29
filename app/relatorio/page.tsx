@@ -94,6 +94,35 @@ export default function RelatorioPage() {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
   }, [])
 
+  // Agrupa SKUs duplicados (mesmo produto+cor+tamanho, cods/precos diferentes do Microvix)
+  // numa linha so: soma saldo das lojas, junta faixa de preco, vendido aparece uma vez.
+  function agruparItens(lista: any[]) {
+    const mapa = new Map<string, any>()
+    for (const it of lista) {
+      const chave = `${it.produto}||${it.cor}||${it.tamanho}`
+      if (!mapa.has(chave)) {
+        // clona somando lojas a partir do zero
+        const lojas: Record<string, number> = {}
+        LOJAS.forEach(l => { lojas[String(l.id)] = Number(it.lojas?.[String(l.id)]) || 0 })
+        mapa.set(chave, {
+          ...it,
+          lojas,
+          totalRede: Object.values(lojas).reduce((s: number, v: number) => s + v, 0),
+          precos: it.preco_venda ? [Number(it.preco_venda)] : [],
+          _ncods: 1,
+        })
+      } else {
+        const ex = mapa.get(chave)
+        LOJAS.forEach(l => { ex.lojas[String(l.id)] += Number(it.lojas?.[String(l.id)]) || 0 })
+        ex.totalRede = Object.values(ex.lojas).reduce((s: number, v: number) => s + Number(v), 0)
+        if (it.preco_venda) ex.precos.push(Number(it.preco_venda))
+        ex._ncods += 1
+        // vendido por atributos e o mesmo para os duplicados — mantem (nao soma)
+      }
+    }
+    return Array.from(mapa.values())
+  }
+
   function montarParams() {
     // Com carrinho, expande o periodo para 365 dias (captura historico dos produtos marcados)
     const diasEfetivo = itens.length > 0 ? Math.max(dias, 365) : dias
@@ -164,12 +193,13 @@ export default function RelatorioPage() {
       s.tamanhos.forEach((t: any) => { csv += `${t.tamanho};${t.qtd};${t.receita}\n` })
       csv += "\n"
     }
-    const itensExp = itensAtualizados.length ? itensAtualizados : itens
+    const itensExp = agruparItens(itensAtualizados.length ? itensAtualizados : itens)
     if (itensExp.length) {
-      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;Preco;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede;Vendido 365d;Receita 365d\n"
+      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;Preco;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede;Vendido tam;Vendido produto;Receita produto\n"
       itensExp.forEach(it => {
         const saldos = LOJAS.map(l => it.lojas?.[String(l.id)] ?? 0).join(";")
-        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${it.preco_venda ?? ""};${saldos};${it.totalRede ?? 0};${it.vd_pecas ?? 0};${it.vd_receita ?? 0}\n`
+        const preco = it.precos?.length ? (Math.min(...it.precos) === Math.max(...it.precos) ? Math.min(...it.precos) : `${Math.min(...it.precos)}~${Math.max(...it.precos)}`) : ""
+        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${preco};${saldos};${it.totalRede ?? 0};${it.vd_pecas_tam ?? 0};${it.vd_pecas ?? 0};${it.vd_receita ?? 0}\n`
       })
     }
     baixar(csv, "relatorio_focca.csv", "text/csv")
@@ -189,15 +219,16 @@ export default function RelatorioPage() {
       s.topprodutos.forEach((p: any) => { html += `<tr><td>${p.produto}</td><td>${p.cor}</td><td>${p.marca}</td><td>${p.qtd}</td><td>${p.receita}</td></tr>` })
       html += "</table>"
     }
-    const itensExpX = itensAtualizados.length ? itensAtualizados : itens
+    const itensExpX = agruparItens(itensAtualizados.length ? itensAtualizados : itens)
     if (itensExpX.length) {
       html += "<h3>Itens Selecionados</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Tam</th><th>Marca</th><th>Preco</th>"
       LOJAS.forEach(l => html += `<th>${l.nome}</th>`)
-      html += "<th>Total</th><th>Vendido 365d</th><th>Receita 365d</th></tr>"
+      html += "<th>Total</th><th>Vendido tam</th><th>Vendido produto</th><th>Receita produto</th></tr>"
       itensExpX.forEach(it => {
-        html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td><td>${it.preco_venda ?? ""}</td>`
+        const preco = it.precos?.length ? (Math.min(...it.precos) === Math.max(...it.precos) ? Math.min(...it.precos) : `${Math.min(...it.precos)}~${Math.max(...it.precos)}`) : ""
+        html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td><td>${preco}</td>`
         LOJAS.forEach(l => html += `<td>${it.lojas?.[String(l.id)] ?? 0}</td>`)
-        html += `<td>${it.totalRede ?? 0}</td><td>${it.vd_pecas ?? 0}</td><td>${it.vd_receita ?? 0}</td></tr>`
+        html += `<td>${it.totalRede ?? 0}</td><td>${it.vd_pecas_tam ?? 0}</td><td>${it.vd_pecas ?? 0}</td><td>${it.vd_receita ?? 0}</td></tr>`
       })
       html += "</table>"
     }
@@ -409,16 +440,21 @@ export default function RelatorioPage() {
                       {LOJAS.map(l => <th key={l.id} style={{ ...th, textAlign: "center" }}>{l.nome}</th>)}
                       <th style={{ ...th, textAlign: "center" }}>Total</th>
                       <th style={{ ...th, textAlign: "center", borderLeft: "2px solid var(--border)" }}>Vendido (tam)</th>
-                      <th style={{ ...th, textAlign: "right" }}>Receita (produto)</th>
+                      <th style={{ ...th, textAlign: "right" }}>Receita (tam)</th>
                     </tr></thead>
                     <tbody>
-                      {(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => (
+                      {agruparItens(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => {
+                        const precoMin = it.precos?.length ? Math.min(...it.precos) : null
+                        const precoMax = it.precos?.length ? Math.max(...it.precos) : null
+                        const precoTxt = precoMin == null ? "—"
+                          : (precoMin === precoMax ? `R$ ${precoMin.toFixed(2)}` : `R$ ${precoMin.toFixed(2)}~${precoMax.toFixed(2)}`)
+                        return (
                         <tr key={i}>
                           <td style={{ ...td, fontWeight: 600 }}>{it.produto}</td>
                           <td style={{ ...td, color: "var(--muted)" }}>{it.cor}</td>
                           <td style={{ ...td, fontWeight: 700, textAlign: "center" }}>{it.tamanho}</td>
                           <td style={td}>{it.marca}</td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{it.preco_venda ? `R$ ${Number(it.preco_venda).toFixed(2)}` : "—"}</td>
+                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{precoTxt}{it._ncods > 1 ? <span style={{ fontSize: "10px", color: "var(--muted)" }}> ({it._ncods} cods)</span> : null}</td>
                           {LOJAS.map(l => {
                             const v = it.lojas?.[String(l.id)] ?? 0
                             return <td key={l.id} style={{ ...td, textAlign: "center", color: v === 0 ? "var(--danger)" : "var(--text)", fontWeight: v === 0 ? 400 : 600 }}>{v}</td>
@@ -428,11 +464,27 @@ export default function RelatorioPage() {
                             <div style={{ fontWeight: 700, fontSize: "14px", color: Number(it.vd_pecas_tam) > 0 ? "var(--success, #16a34a)" : "var(--muted)" }}>{it.vd_pecas_tam ?? 0}</div>
                             <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}>tam {it.tamanho} · {it.vd_pecas ?? 0} no produto</div>
                           </td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{Number(it.vd_receita) > 0 ? `R$ ${Number(it.vd_receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
+                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{Number(it.vd_receita_tam) > 0 ? `R$ ${Number(it.vd_receita_tam).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
+                </div>
+                {/* Resumo por produto: total vendido (uma vez, nao repetido por tamanho) */}
+                <div style={{ marginTop: "12px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {Object.values(
+                    (itensAtualizados.length ? itensAtualizados : itens).reduce((acc: any, it: any) => {
+                      const k = `${it.produto}||${it.cor}`
+                      if (!acc[k]) acc[k] = { produto: it.produto, cor: it.cor, pecas: it.vd_pecas ?? 0, receita: it.vd_receita ?? 0 }
+                      return acc
+                    }, {})
+                  ).map((r: any, i: number) => (
+                    <div key={i} style={{ padding: "8px 12px", background: "var(--card-bg, #f9fafb)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }}>
+                      <span style={{ fontWeight: 600 }}>{r.produto}</span> <span style={{ color: "var(--muted)" }}>({r.cor})</span>
+                      <span style={{ marginLeft: "8px" }}>· total: <strong style={{ color: "var(--success, #16a34a)" }}>{r.pecas}</strong> peças · <strong>R$ {Number(r.receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> em 365d</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
