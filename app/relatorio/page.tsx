@@ -28,6 +28,45 @@ export default function RelatorioPage() {
   const [dados, setDados] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
+  const [itensAtualizados, setItensAtualizados] = useState<any[]>([])
+  const [atualizandoCarrinho, setAtualizandoCarrinho] = useState(false)
+
+  // Busca o saldo/preco ATUAL de cada item do carrinho (ultima sincronizacao, max 15min)
+  useEffect(() => {
+    if (itens.length === 0) { setItensAtualizados([]); return }
+    let cancelado = false
+    setAtualizandoCarrinho(true)
+    // Agrupa por produto+cor para minimizar chamadas (uma grade traz todos os tamanhos)
+    const chavesPC = [...new Set(itens.map(it => `${it.produto}|||${it.cor}`))]
+    Promise.all(chavesPC.map(pc => {
+      const [produto, cor] = pc.split("|||")
+      const q = new URLSearchParams({ produto })
+      if (cor) q.set("cor", cor)
+      return fetch(`${API_URL}/produto/grade?${q}`).then(r => r.json()).catch(() => [])
+    })).then(grades => {
+      if (cancelado) return
+      // Mapa: cod_produto -> {lojas, preco}
+      const mapa: Record<string, any> = {}
+      grades.flat().forEach((linha: any) => {
+        if (!linha || linha.cod_produto == null) return
+        const lojas: Record<string, number> = {}
+        LOJAS.forEach(l => { lojas[String(l.id)] = Number(linha.lojas?.[String(l.id)]) || 0 })
+        mapa[String(linha.cod_produto)] = {
+          lojas,
+          totalRede: Object.values(lojas).reduce((s: number, v: number) => s + v, 0),
+          preco_venda: linha.preco_venda ?? null,
+        }
+      })
+      // Atualiza cada item do carrinho com os dados frescos (mantem o snapshot se nao achar)
+      const atualizados = itens.map(it => {
+        const fresco = mapa[String(it.cod_produto)]
+        return fresco ? { ...it, lojas: fresco.lojas, totalRede: fresco.totalRede, preco_venda: fresco.preco_venda } : it
+      })
+      setItensAtualizados(atualizados)
+      setAtualizandoCarrinho(false)
+    })
+    return () => { cancelado = true }
+  }, [itens])
 
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
@@ -38,7 +77,6 @@ export default function RelatorioPage() {
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
-    if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
     if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
     if (filtros.anos.length)     p.set("ano",     filtros.anos.join(","))
     if (filtros.colecoes.length) {
@@ -47,6 +85,14 @@ export default function RelatorioPage() {
       const cols = resolverColecoes(filtros, opPorAno)
       if (cols.length) p.set("colecao", cols.join(","))
     }
+
+    // PRODUTO: combina o filtro global de produto + os produtos do carrinho.
+    // Se houver itens no carrinho, as secoes de cima passam a focar nesses produtos.
+    const produtosGlobais = filtros.produtos || []
+    const produtosCarrinho = [...new Set(itens.map(it => it.produto))]
+    const produtosTodos = [...new Set([...produtosGlobais, ...produtosCarrinho])]
+    if (produtosTodos.length) p.set("produto", produtosTodos.join(","))
+
     return p
   }
 
@@ -59,7 +105,7 @@ export default function RelatorioPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { gerar() /* eslint-disable-next-line */ }, [versaoBusca, dias, secoesSel.join(",")])
+  useEffect(() => { gerar() /* eslint-disable-next-line */ }, [versaoBusca, dias, secoesSel.join(","), itens.length])
 
   function toggleSecao(k: string) {
     setSecoesSel(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])
@@ -94,11 +140,12 @@ export default function RelatorioPage() {
       s.tamanhos.forEach((t: any) => { csv += `${t.tamanho};${t.qtd};${t.receita}\n` })
       csv += "\n"
     }
-    if (itens.length) {
-      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede\n"
-      itens.forEach(it => {
+    const itensExp = itensAtualizados.length ? itensAtualizados : itens
+    if (itensExp.length) {
+      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;Preco;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede\n"
+      itensExp.forEach(it => {
         const saldos = LOJAS.map(l => it.lojas?.[String(l.id)] ?? 0).join(";")
-        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${saldos};${it.totalRede ?? 0}\n`
+        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${it.preco_venda ?? ""};${saldos};${it.totalRede ?? 0}\n`
       })
     }
     baixar(csv, "relatorio_focca.csv", "text/csv")
@@ -118,12 +165,13 @@ export default function RelatorioPage() {
       s.topprodutos.forEach((p: any) => { html += `<tr><td>${p.produto}</td><td>${p.cor}</td><td>${p.marca}</td><td>${p.qtd}</td><td>${p.receita}</td></tr>` })
       html += "</table>"
     }
-    if (itens.length) {
-      html += "<h3>Itens Selecionados</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Tam</th><th>Marca</th>"
+    const itensExpX = itensAtualizados.length ? itensAtualizados : itens
+    if (itensExpX.length) {
+      html += "<h3>Itens Selecionados</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Tam</th><th>Marca</th><th>Preco</th>"
       LOJAS.forEach(l => html += `<th>${l.nome}</th>`)
       html += "<th>Total</th></tr>"
-      itens.forEach(it => {
-        html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td>`
+      itensExpX.forEach(it => {
+        html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td><td>${it.preco_venda ?? ""}</td>`
         LOJAS.forEach(l => html += `<td>${it.lojas?.[String(l.id)] ?? 0}</td>`)
         html += `<td>${it.totalRede ?? 0}</td></tr>`
       })
@@ -187,8 +235,13 @@ export default function RelatorioPage() {
           <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
             Período: últimos {dias} dias · Gerado em {new Date().toLocaleString("pt-BR")}
             {filtros.marcas.length > 0 && ` · Marcas: ${filtros.marcas.join(", ")}`}
-            {filtros.produtos.length > 0 && ` · ${filtros.produtos.length} produtos filtrados`}
+            {filtros.produtos.length > 0 && ` · ${filtros.produtos.length} produtos no filtro`}
           </div>
+          {itens.length > 0 && (
+            <div className="no-print" style={{ marginTop: "10px", padding: "8px 12px", background: "var(--primary-light)", borderRadius: "8px", fontSize: "12px", color: "var(--primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+              🛒 As seções abaixo estão focadas nos {[...new Set(itens.map(it => it.produto))].length} produtos da sua seleção (carrinho). Esvazie o carrinho para ver o panorama completo.
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -319,21 +372,22 @@ export default function RelatorioPage() {
             {itens.length > 0 && (
               <div style={{ ...card, borderColor: "var(--primary)" }}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "4px" }}>Itens Selecionados para Análise</h2>
-                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja</p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>
-                      <th style={th}>Produto</th><th style={th}>Cor</th><th style={th}>Tam</th><th style={th}>Marca</th>
+                      <th style={th}>Produto</th><th style={th}>Cor</th><th style={th}>Tam</th><th style={th}>Marca</th><th style={{ ...th, textAlign: "right" }}>Preço</th>
                       {LOJAS.map(l => <th key={l.id} style={{ ...th, textAlign: "center" }}>{l.nome}</th>)}
                       <th style={{ ...th, textAlign: "center" }}>Total</th>
                     </tr></thead>
                     <tbody>
-                      {itens.map((it, i) => (
+                      {(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => (
                         <tr key={i}>
                           <td style={{ ...td, fontWeight: 600 }}>{it.produto}</td>
                           <td style={{ ...td, color: "var(--muted)" }}>{it.cor}</td>
                           <td style={{ ...td, fontWeight: 700, textAlign: "center" }}>{it.tamanho}</td>
                           <td style={td}>{it.marca}</td>
+                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{it.preco_venda ? `R$ ${Number(it.preco_venda).toFixed(2)}` : "—"}</td>
                           {LOJAS.map(l => {
                             const v = it.lojas?.[String(l.id)] ?? 0
                             return <td key={l.id} style={{ ...td, textAlign: "center", color: v === 0 ? "var(--danger)" : "var(--text)", fontWeight: v === 0 ? 400 : 600 }}>{v}</td>
