@@ -52,11 +52,11 @@ const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick
           {mostrarMarca && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--primary-light)", color: "var(--primary)", fontWeight: 600, whiteSpace: "nowrap" }}>{prod.marca}</span>}
           <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--surface2)", color: "var(--muted)", whiteSpace: "nowrap" }}>{prod.sexo}</span>
           <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--surface2)", color: "var(--muted)", whiteSpace: "nowrap" }}>{prod.colecao}</span>
-          <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--surface2)", color: "var(--muted)", whiteSpace: "nowrap" }}>{prod.itens.length} tam.</span>
+          <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "var(--surface2)", color: "var(--muted)", whiteSpace: "nowrap" }}>{prod.tamanhosDistintos} tam.</span>
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "14px", flexShrink: 0 }}>
-        {prod.preco > 0 && <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div><div style={{ fontSize: "13px", fontWeight: 700 }}>R$ {prod.preco.toFixed(0)}</div></div>}
+        {prod.precoMax > 0 && <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div><div style={{ fontSize: "13px", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}>{prod.temPrecoDivergente ? <>R$ {prod.precoMin.toFixed(0)}~{prod.precoMax.toFixed(0)} <span title="Preços divergentes na rede" style={{ fontSize: "11px" }}>⚠️</span></> : <>R$ {prod.precoMax.toFixed(0)}</>}</div></div>}
         <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Rede</div><div style={{ fontSize: "16px", fontWeight: 700, color: prod.totalRede === 0 ? "var(--danger)" : prod.totalRede <= 5 ? "var(--warning)" : "var(--primary)" }}>{prod.totalRede}</div></div>
         <span style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "4px", background: st.bg, color: st.cor, whiteSpace: "nowrap" }}>{st.label}</span>
         <span style={{ color: "var(--muted)", fontSize: "13px" }}>›</span>
@@ -70,29 +70,45 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
   const { toggle, temItem } = useSelecao()
   const [grade, setGrade] = useState<any[]>([])
   const [carregando, setCarregando] = useState(true)
+  const [outrasCores, setOutrasCores] = useState<string[]>([])
+  const [verCores, setVerCores] = useState(false)
+  const [corAtiva, setCorAtiva] = useState<string>(prod?.cor || "")
 
   useEffect(() => {
     if (!prod) return
     setCarregando(true)
     const p = new URLSearchParams({ produto: prod.produto })
-    if (prod.cor) p.set("cor", prod.cor)
+    if (corAtiva) p.set("cor", corAtiva)
     fetch(`${API_URL}/produto/grade?${p}`)
       .then(r => r.json())
       .then(g => setGrade(Array.isArray(g) ? g : []))
       .catch(() => setGrade([]))
       .finally(() => setCarregando(false))
-  }, [prod])
+  }, [prod, corAtiva])
+
+  function carregarOutrasCores() {
+    if (verCores) { setVerCores(false); return }
+    setVerCores(true)
+    fetch(`${API_URL}/produto/grade?produto=${encodeURIComponent(prod.produto)}`)
+      .then(r => r.json())
+      .then(g => {
+        const cores = [...new Set((Array.isArray(g) ? g : []).map((x: any) => x.cor as string))]
+        setOutrasCores(cores as string[])
+      })
+      .catch(() => setOutrasCores([]))
+  }
 
   if (!prod) return null
 
-  // Ordena por tamanho
   const gradeOrd = [...grade].sort((a, b) => {
     const ia = ORDEM_TAM.indexOf(a.tamanho), ib = ORDEM_TAM.indexOf(b.tamanho)
     if (ia === -1 && ib === -1) return String(a.tamanho).localeCompare(String(b.tamanho))
     if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib
   })
 
-  // Monta item do carrinho a partir de uma linha da grade
+  const contagemTam: Record<string, number> = {}
+  gradeOrd.forEach(l => { contagemTam[l.tamanho] = (contagemTam[l.tamanho] || 0) + 1 })
+
   function itemDe(linha: any) {
     const lojas: Record<string, number> = {}
     LOJAS.forEach(l => { lojas[String(l.id)] = saldoReal(linha.lojas?.[String(l.id)]) })
@@ -101,56 +117,85 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
   }
 
   const todosMarcados = gradeOrd.length > 0 && gradeOrd.every(l => temItem(chaveItem({ cod_produto: l.cod_produto, cor: l.cor, tamanho: l.tamanho })))
-
   function toggleTodos() {
-    if (todosMarcados) {
-      gradeOrd.forEach(l => { const it = itemDe(l); if (temItem(chaveItem(it))) toggle(it) })
-    } else {
-      gradeOrd.forEach(l => { const it = itemDe(l); if (!temItem(chaveItem(it))) toggle(it) })
-    }
+    gradeOrd.forEach(l => {
+      const it = itemDe(l)
+      const marcado = temItem(chaveItem(it))
+      if (todosMarcados && marcado) toggle(it)
+      else if (!todosMarcados && !marcado) toggle(it)
+    })
   }
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "14px", maxWidth: "860px", width: "100%", maxHeight: "85vh", overflow: "auto", border: "1px solid var(--border)" }}>
-        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "sticky", top: 0, background: "var(--surface)", zIndex: 1 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "14px", maxWidth: "900px", width: "100%", maxHeight: "86vh", overflow: "auto", border: "1px solid var(--border)" }}>
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "sticky", top: 0, background: "var(--surface)", zIndex: 2 }}>
           <div>
             <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{prod.produto}</div>
-            <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "3px" }}>{prod.cor} · {prod.modelo} · {prod.marca} · {prod.colecao}</div>
-            <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "4px" }}>Marque os tamanhos para adicionar à seleção de análise</div>
+            <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "3px" }}>{corAtiva} &middot; {prod.modelo} &middot; {prod.marca} &middot; {prod.colecao}</div>
+            <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "4px" }}>Marque os tamanhos para adicionar a selecao de analise</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "22px", cursor: "pointer", color: "var(--muted)", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "22px", cursor: "pointer", color: "var(--muted)", lineHeight: 1 }}>&times;</button>
         </div>
+
         <div style={{ padding: "18px 22px" }}>
+          <div style={{ marginBottom: "14px" }}>
+            <button onClick={carregarOutrasCores} style={{ padding: "7px 14px", borderRadius: "8px", border: "1px solid var(--border)", background: verCores ? "var(--primary-light)" : "var(--surface2)", color: verCores ? "var(--primary)" : "var(--text)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+              {verCores ? "Ocultar cores" : "Ver outras cores"}
+            </button>
+            {verCores && outrasCores.length > 0 && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
+                {outrasCores.map(c => (
+                  <button key={c} onClick={() => setCorAtiva(c)} style={{
+                    padding: "5px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer",
+                    fontWeight: corAtiva === c ? 700 : 400, border: "1px solid",
+                    background: corAtiva === c ? "var(--primary)" : "var(--surface2)",
+                    color: corAtiva === c ? "#fff" : "var(--text)",
+                    borderColor: corAtiva === c ? "var(--primary)" : "var(--border)",
+                  }}>{c}</button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {carregando ? (
             <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Carregando grade completa...</div>
           ) : gradeOrd.length === 0 ? (
-            <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Grade não encontrada.</div>
+            <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>Grade nao encontrada.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                 <thead><tr>
                   <th style={{ ...thCell, textAlign: "center", width: "44px" }}>
-                    <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} title="Selecionar todos" />
+                    <input type="checkbox" checked={todosMarcados} onChange={toggleTodos} style={{ cursor: "pointer", width: "17px", height: "17px", accentColor: "var(--primary)" }} title="Selecionar todos" />
                   </th>
-                  <th style={{ ...thCell, textAlign: "left", paddingLeft: "12px", minWidth: "55px" }}>TAM</th>
-                  {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "70px" }}>{l.nome}</th>)}
-                  <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "60px" }}>TOTAL</th>
+                  <th style={{ ...thCell, textAlign: "left", paddingLeft: "12px", minWidth: "60px" }}>TAM</th>
+                  <th style={{ ...thCell, minWidth: "80px" }}>PRECO</th>
+                  {lojasFiltradas.map(l => <th key={l.id} style={{ ...thCell, minWidth: "62px" }}>{l.nome}</th>)}
+                  <th style={{ ...thCell, borderLeft: "2px solid var(--border)", minWidth: "55px" }}>TOTAL</th>
                 </tr></thead>
                 <tbody>
                   {gradeOrd.map((linha, ii) => {
                     const it = itemDe(linha)
                     const marcado = temItem(chaveItem(it))
                     const totalLinha = it.totalRede || 0
+                    const duplicado = contagemTam[linha.tamanho] > 1
+                    const preco = Number(linha.preco_venda) || 0
                     return (
                       <tr key={ii} style={{ borderTop: "1px solid var(--border)", background: marcado ? "var(--primary-light)" : "transparent", cursor: "pointer" }} onClick={() => toggle(it)}>
                         <td style={{ padding: "8px", textAlign: "center" }}>
-                          <input type="checkbox" checked={marcado} onChange={() => toggle(it)} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} />
+                          <input type="checkbox" checked={marcado} onChange={() => toggle(it)} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", width: "17px", height: "17px", accentColor: "var(--primary)" }} />
                         </td>
-                        <td style={{ padding: "8px 12px", fontWeight: 700, fontSize: "13px" }}>{linha.tamanho}</td>
+                        <td style={{ padding: "8px 12px", fontWeight: 700, fontSize: "13px" }}>
+                          {linha.tamanho}
+                          {duplicado && <span title="Este tamanho tem cadastros com precos diferentes" style={{ marginLeft: "5px", fontSize: "11px" }}>&#9888;</span>}
+                        </td>
+                        <td style={{ padding: "8px 12px", color: preco > 0 ? "var(--text)" : "var(--muted)", fontWeight: 600 }}>
+                          {preco > 0 ? `R$ ${preco.toFixed(2)}` : "-"}
+                        </td>
                         {lojasFiltradas.map(l => { const v = saldoReal(linha.lojas?.[String(l.id)]); const c = corCelula(v); return (
                           <td key={l.id} style={{ padding: "5px 8px", textAlign: "center" }}>
-                            <span style={{ display: "inline-block", minWidth: "34px", padding: "4px 8px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw }}>{v}</span>
+                            <span style={{ display: "inline-block", minWidth: "30px", padding: "4px 8px", borderRadius: "6px", background: c.bg, color: c.color, fontWeight: c.fw }}>{v}</span>
                           </td>
                         )})}
                         <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 700, color: totalLinha === 0 ? "var(--danger)" : "var(--primary)", borderLeft: "2px solid var(--border)" }}>{totalLinha}</td>
@@ -159,6 +204,11 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
                   })}
                 </tbody>
               </table>
+              {Object.values(contagemTam).some(c => c > 1) && (
+                <div style={{ marginTop: "12px", fontSize: "11px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>&#9888;</span> Tamanhos marcados tem cadastros com precos diferentes na rede (possivel remarcacao ou duplicata no Microvix).
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -166,7 +216,6 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
     </div>
   )
 }
-
 
 export default function ComprasPage() {
   const { filtros, versaoBusca } = useFiltros()
@@ -227,8 +276,9 @@ export default function ComprasPage() {
   const produtos = useMemo(() => {
     const map: Record<string, any> = {}
     dados.forEach(row => {
-      const key = `${row.cod_produto}||${row.cor}`
-      if (!map[key]) map[key] = { produto: row.produto, cor: row.cor, modelo: row.modelo, colecao: row.colecao, sexo: row.sexo, marca: row.marca, preco: row.preco_venda || 0, itens: [] }
+      // AGRUPA POR PRODUTO+COR (descricao, nao cod_produto) — junta SKUs duplicados
+      const key = `${row.produto}||${row.cor}`
+      if (!map[key]) map[key] = { produto: row.produto, cor: row.cor, modelo: row.modelo, colecao: row.colecao, sexo: row.sexo, marca: row.marca, itens: [] }
       map[key].itens.push(row)
     })
     return Object.values(map).map((prod: any) => {
@@ -239,6 +289,13 @@ export default function ComprasPage() {
       })
       prod.itens.forEach((it: any) => { it.totalReal = lojasFiltradas.reduce((s, l) => s + saldoReal(it[l.key]), 0) })
       prod.totalRede = prod.itens.reduce((s: number, it: any) => s + it.totalReal, 0)
+      // FAIXA DE PRECO (min ~ max) entre os SKUs com preco valido
+      const precos = prod.itens.map((it: any) => Number(it.preco_venda) || 0).filter((p: number) => p > 0)
+      prod.precoMin = precos.length ? Math.min(...precos) : 0
+      prod.precoMax = precos.length ? Math.max(...precos) : 0
+      prod.temPrecoDivergente = prod.precoMin !== prod.precoMax
+      // quantos tamanhos distintos (nao SKUs)
+      prod.tamanhosDistintos = new Set(prod.itens.map((it: any) => it.tamanho)).size
       prod.status = calcStatus(prod.totalRede)
       return prod
     })
