@@ -77,7 +77,7 @@ export default function RelatorioPage() {
         // Mescla vendas por posicao (mesma ordem enviada)
         const comVendas = atualizados.map((it, idx) => {
           const v = vItens[idx] || {}
-          return { ...it, vd_pecas: v.pecas ?? 0, vd_receita: v.receita ?? 0, vd_vendas: v.vendas ?? 0, vd_pecas_tam: v.pecas_tamanho ?? 0 }
+          return { ...it, vd_pecas: v.pecas ?? 0, vd_receita: v.receita ?? 0, vd_vendas: v.vendas ?? 0, vd_pecas_tam: v.pecas_tamanho ?? 0, vd_receita_tam: v.receita_tamanho ?? 0 }
         })
         setItensAtualizados(comVendas)
         setAtualizandoCarrinho(false)
@@ -408,8 +408,8 @@ export default function RelatorioPage() {
                       <th style={th}>Produto</th><th style={th}>Cor</th><th style={th}>Tam</th><th style={th}>Marca</th><th style={{ ...th, textAlign: "right" }}>Preço</th>
                       {LOJAS.map(l => <th key={l.id} style={{ ...th, textAlign: "center" }}>{l.nome}</th>)}
                       <th style={{ ...th, textAlign: "center" }}>Total</th>
-                      <th style={{ ...th, textAlign: "center", borderLeft: "2px solid var(--border)" }}>Vendido</th>
-                      <th style={{ ...th, textAlign: "right" }}>Receita</th>
+                      <th style={{ ...th, textAlign: "center", borderLeft: "2px solid var(--border)" }}>Vendido (tam)</th>
+                      <th style={{ ...th, textAlign: "right" }}>Receita (produto)</th>
                     </tr></thead>
                     <tbody>
                       {(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => (
@@ -424,7 +424,10 @@ export default function RelatorioPage() {
                             return <td key={l.id} style={{ ...td, textAlign: "center", color: v === 0 ? "var(--danger)" : "var(--text)", fontWeight: v === 0 ? 400 : 600 }}>{v}</td>
                           })}
                           <td style={{ ...td, textAlign: "center", fontWeight: 700, color: "var(--primary)" }}>{it.totalRede ?? 0}</td>
-                          <td style={{ ...td, textAlign: "center", fontWeight: 700, borderLeft: "2px solid var(--border)", color: Number(it.vd_pecas) > 0 ? "var(--success, #16a34a)" : "var(--muted)" }}>{it.vd_pecas ?? 0}{Number(it.vd_pecas_tam) > 0 ? <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}> ({it.vd_pecas_tam} no tam)</span> : null}</td>
+                          <td style={{ ...td, textAlign: "center", borderLeft: "2px solid var(--border)" }}>
+                            <div style={{ fontWeight: 700, fontSize: "14px", color: Number(it.vd_pecas_tam) > 0 ? "var(--success, #16a34a)" : "var(--muted)" }}>{it.vd_pecas_tam ?? 0}</div>
+                            <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}>tam {it.tamanho} · {it.vd_pecas ?? 0} no produto</div>
+                          </td>
                           <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{Number(it.vd_receita) > 0 ? `R$ ${Number(it.vd_receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
                         </tr>
                       ))}
