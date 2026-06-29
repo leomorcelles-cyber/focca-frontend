@@ -62,8 +62,30 @@ export default function RelatorioPage() {
         const fresco = mapa[String(it.cod_produto)]
         return fresco ? { ...it, lojas: fresco.lojas, totalRede: fresco.totalRede, preco_venda: fresco.preco_venda } : it
       })
-      setItensAtualizados(atualizados)
-      setAtualizandoCarrinho(false)
+
+      // Busca VENDAS aproximadas (nucleo do nome + colecao + cor) — Microvix nao tem chave exata
+      fetch(`${API_URL}/carrinho/vendas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itens: atualizados.map(it => ({ produto: it.produto, cor: it.cor, colecao: it.colecao, tamanho: it.tamanho })),
+          dias: 365,
+        }),
+      }).then(r => r.json()).then(vend => {
+        if (cancelado) return
+        const vItens = vend?.itens || []
+        // Mescla vendas por posicao (mesma ordem enviada)
+        const comVendas = atualizados.map((it, idx) => {
+          const v = vItens[idx] || {}
+          return { ...it, vd_pecas: v.pecas ?? 0, vd_receita: v.receita ?? 0, vd_vendas: v.vendas ?? 0, vd_pecas_tam: v.pecas_tamanho ?? 0 }
+        })
+        setItensAtualizados(comVendas)
+        setAtualizandoCarrinho(false)
+      }).catch(() => {
+        if (cancelado) return
+        setItensAtualizados(atualizados)  // sem vendas, ao menos mostra saldo
+        setAtualizandoCarrinho(false)
+      })
     })
     return () => { cancelado = true }
   }, [itens])
@@ -73,7 +95,9 @@ export default function RelatorioPage() {
   }, [])
 
   function montarParams() {
-    const p = new URLSearchParams({ dias: String(dias), secoes: secoesSel.join(",") })
+    // Com carrinho, expande o periodo para 365 dias (captura historico dos produtos marcados)
+    const diasEfetivo = itens.length > 0 ? Math.max(dias, 365) : dias
+    const p = new URLSearchParams({ dias: String(diasEfetivo), secoes: secoesSel.join(",") })
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
@@ -142,10 +166,10 @@ export default function RelatorioPage() {
     }
     const itensExp = itensAtualizados.length ? itensAtualizados : itens
     if (itensExp.length) {
-      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;Preco;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede\n"
+      csv += "ITENS SELECIONADOS (CARRINHO)\nProduto;Cor;Tamanho;Marca;Preco;" + LOJAS.map(l => l.nome).join(";") + ";Total Rede;Vendido 365d;Receita 365d\n"
       itensExp.forEach(it => {
         const saldos = LOJAS.map(l => it.lojas?.[String(l.id)] ?? 0).join(";")
-        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${it.preco_venda ?? ""};${saldos};${it.totalRede ?? 0}\n`
+        csv += `${it.produto};${it.cor};${it.tamanho};${it.marca || ""};${it.preco_venda ?? ""};${saldos};${it.totalRede ?? 0};${it.vd_pecas ?? 0};${it.vd_receita ?? 0}\n`
       })
     }
     baixar(csv, "relatorio_focca.csv", "text/csv")
@@ -169,11 +193,11 @@ export default function RelatorioPage() {
     if (itensExpX.length) {
       html += "<h3>Itens Selecionados</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Tam</th><th>Marca</th><th>Preco</th>"
       LOJAS.forEach(l => html += `<th>${l.nome}</th>`)
-      html += "<th>Total</th></tr>"
+      html += "<th>Total</th><th>Vendido 365d</th><th>Receita 365d</th></tr>"
       itensExpX.forEach(it => {
         html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td><td>${it.preco_venda ?? ""}</td>`
         LOJAS.forEach(l => html += `<td>${it.lojas?.[String(l.id)] ?? 0}</td>`)
-        html += `<td>${it.totalRede ?? 0}</td></tr>`
+        html += `<td>${it.totalRede ?? 0}</td><td>${it.vd_pecas ?? 0}</td><td>${it.vd_receita ?? 0}</td></tr>`
       })
       html += "</table>"
     }
@@ -271,7 +295,12 @@ export default function RelatorioPage() {
 
             {secoesSel.includes("vendas") && s.vendas && !s.vendas.erro && (
               <div style={card}>
-                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>KPIs de Vendas ({dias} dias)</h2>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>KPIs de Vendas ({itens.length > 0 ? "365" : dias} dias{itens.length > 0 ? " · período expandido p/ os produtos da seleção" : ""})</h2>
+                {itens.length > 0 && Number(s.vendas.num_vendas || 0) === 0 && (
+                  <div style={{ padding: "10px 12px", background: "var(--warning-light, #fff3cd)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)", marginBottom: "12px" }}>
+                    ⚠️ Os produtos selecionados não tiveram vendas registradas no período. Isso pode indicar itens parados em estoque (sem giro).
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px" }}>
                   {[
                     { l: "Receita", v: fmtR(s.vendas.receita), c: "var(--primary)" },
@@ -372,13 +401,15 @@ export default function RelatorioPage() {
             {itens.length > 0 && (
               <div style={{ ...card, borderColor: "var(--primary)" }}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "4px" }}>Itens Selecionados para Análise</h2>
-                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, aprox. por nome+coleção) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>
                       <th style={th}>Produto</th><th style={th}>Cor</th><th style={th}>Tam</th><th style={th}>Marca</th><th style={{ ...th, textAlign: "right" }}>Preço</th>
                       {LOJAS.map(l => <th key={l.id} style={{ ...th, textAlign: "center" }}>{l.nome}</th>)}
                       <th style={{ ...th, textAlign: "center" }}>Total</th>
+                      <th style={{ ...th, textAlign: "center", borderLeft: "2px solid var(--border)" }}>Vendido</th>
+                      <th style={{ ...th, textAlign: "right" }}>Receita</th>
                     </tr></thead>
                     <tbody>
                       {(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => (
@@ -393,6 +424,8 @@ export default function RelatorioPage() {
                             return <td key={l.id} style={{ ...td, textAlign: "center", color: v === 0 ? "var(--danger)" : "var(--text)", fontWeight: v === 0 ? 400 : 600 }}>{v}</td>
                           })}
                           <td style={{ ...td, textAlign: "center", fontWeight: 700, color: "var(--primary)" }}>{it.totalRede ?? 0}</td>
+                          <td style={{ ...td, textAlign: "center", fontWeight: 700, borderLeft: "2px solid var(--border)", color: Number(it.vd_pecas) > 0 ? "var(--success, #16a34a)" : "var(--muted)" }}>{it.vd_pecas ?? 0}{Number(it.vd_pecas_tam) > 0 ? <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}> ({it.vd_pecas_tam} no tam)</span> : null}</td>
+                          <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{Number(it.vd_receita) > 0 ? `R$ ${Number(it.vd_receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
