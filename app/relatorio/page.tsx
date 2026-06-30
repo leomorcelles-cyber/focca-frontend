@@ -114,7 +114,7 @@ export default function RelatorioPage() {
       } else {
         const ex = mapa.get(chave)
         LOJAS.forEach(l => { ex.lojas[String(l.id)] += Number(it.lojas?.[String(l.id)]) || 0 })
-        ex.totalRede = Object.values(ex.lojas).reduce((s: number, v: number) => s + Number(v), 0)
+        ex.totalRede = Object.values(ex.lojas).reduce((s: number, v: any) => s + Number(v), 0)
         if (it.preco_venda) ex.precos.push(Number(it.preco_venda))
         ex._ncods += 1
         // vendido por atributos e o mesmo para os duplicados — mantem (nao soma)
@@ -446,7 +446,7 @@ export default function RelatorioPage() {
                       {agruparItens(itensAtualizados.length ? itensAtualizados : itens).map((it, i) => {
                         const precoMin = it.precos?.length ? Math.min(...it.precos) : null
                         const precoMax = it.precos?.length ? Math.max(...it.precos) : null
-                        const precoTxt = precoMin == null ? "—"
+                        const precoTxt = (precoMin == null || precoMax == null) ? "—"
                           : (precoMin === precoMax ? `R$ ${precoMin.toFixed(2)}` : `R$ ${precoMin.toFixed(2)}~${precoMax.toFixed(2)}`)
                         return (
                         <tr key={i}>
