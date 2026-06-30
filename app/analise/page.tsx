@@ -214,8 +214,8 @@ export default function AnalisePage() {
                     {aba === "lojas" && <>
                       <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
                       <td style={{ ...td, textAlign: "center" }}>{row.num_vendas}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{Number(row.pecas || 0).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
+                      <td style={{ ...td, textAlign: "center" }}>{Number(row.pecas_vendidas || 0).toLocaleString("pt-BR")}</td>
+                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita_total)}</td>
                       <td style={{ ...td, textAlign: "right", color: Number(row.margem_media) >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>{Number(row.margem_media || 0).toFixed(1)}%</td>
                     </>}
                   </tr>
