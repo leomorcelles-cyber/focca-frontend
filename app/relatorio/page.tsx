@@ -16,7 +16,7 @@ const SECOES = [
   { key: "topprodutos", label: "Top Produtos" },
   { key: "topmarcas",   label: "Top Marcas" },
   { key: "tamanhos",    label: "Curva de Tamanhos" },
-  { key: "vendedores",  label: "Ranking Vendedores" },
+  { key: "lojas",  label: "Vendas por Loja" },
 ]
 
 export default function RelatorioPage() {
@@ -407,19 +407,20 @@ export default function RelatorioPage() {
               </div>
             )}
 
-            {secoesSel.includes("vendedores") && s.vendedores?.length > 0 && (
+            {secoesSel.includes("lojas") && s.lojas?.length > 0 && (
               <div style={card}>
-                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Ranking de Vendedores</h2>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Vendas por Loja</h2>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr>{["Loja","Vendedor","Vendas","Receita"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                    <thead><tr>{["Loja","Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                     <tbody>
-                      {s.vendedores.map((v: any, i: number) => (
+                      {s.lojas.map((v: any, i: number) => (
                         <tr key={i}>
-                          <td style={td}>{v.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
-                          <td style={{ ...td, fontWeight: 600 }}>#{v.cod_vendedor}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>{v.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
                           <td style={{ ...td, textAlign: "center" }}>{v.num_vendas}</td>
+                          <td style={{ ...td, textAlign: "center" }}>{Number(v.pecas || 0)}</td>
                           <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(v.receita)}</td>
+                          <td style={{ ...td, textAlign: "right", color: Number(v.margem_media) >= 0 ? "var(--success, #16a34a)" : "var(--danger)" }}>{Number(v.margem_media || 0).toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
