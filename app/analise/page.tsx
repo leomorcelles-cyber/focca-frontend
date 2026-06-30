@@ -9,14 +9,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
 
-type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "vendedores"
+type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "lojas"
 
 const ABAS: { key: Aba, label: string }[] = [
   { key: "produtos",   label: "Produtos" },
   { key: "tamanhos",   label: "Tamanhos" },
   { key: "colecoes",   label: "Coleções" },
   { key: "marcas",     label: "Marcas" },
-  { key: "vendedores", label: "Vendedores" },
+  { key: "lojas",      label: "Lojas" },
 ]
 
 export default function AnalisePage() {
@@ -46,15 +46,12 @@ export default function AnalisePage() {
     if (filtros.anos.length)    p.set("ano",     filtros.anos.join(","))
 
     // Colecao: usa selecao explicita, ou resolve a partir de ano/estacao.
-    // Se o usuario escolheu colecoes especificas, envia elas.
-    // Se escolheu so ano+estacao, envia as colecoes resultantes (sem limite).
     if (filtros.colecoes.length) {
       p.set("colecao", filtros.colecoes.join(","))
     } else if (filtros.anos.length && filtros.estacoes.length) {
       const cols = resolverColecoes(filtros, opPorAno)
       if (cols.length) p.set("colecao", cols.join(","))
     }
-    // Se so o ano foi escolhido (sem estacao/colecao), o filtro de ano ja recorta.
     return p
   }
 
@@ -78,7 +75,6 @@ export default function AnalisePage() {
   // Busca ao entrar com filtros, ao mudar dias, ou ao trocar de aba
   useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, dias, aba])
 
-  // Recarrega so a lista da aba quando troca de aba (mais leve)
   const receitaDia = useMemo(() => {
     const map: Record<string, any> = {}
     receita.forEach(r => {
@@ -107,7 +103,7 @@ export default function AnalisePage() {
         <div>
           <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Análise de Vendas</h1>
           <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
-            Dinâmica por produto, tamanho, coleção, marca e vendedor — respeitando os filtros globais
+            Dinâmica por produto, tamanho, coleção, marca e loja — respeitando os filtros globais
           </p>
         </div>
         <select value={dias} onChange={e => setDias(Number(e.target.value))} style={{ padding: "8px 12px", borderRadius: "8px", fontSize: "13px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)" }}>
@@ -138,7 +134,7 @@ export default function AnalisePage() {
         ))}
       </div>
 
-      {/* Gráfico de receita diária */}
+      {/* Grafico de receita diaria */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
         <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px", color: "var(--text)" }}>Receita diária — {dias} dias</h2>
         {receitaDia.length === 0 ? (
@@ -159,7 +155,7 @@ export default function AnalisePage() {
         )}
       </div>
 
-      {/* Abas de dimensão */}
+      {/* Abas de dimensao */}
       <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
         {ABAS.map(a => (
           <button key={a.key} onClick={() => setAba(a.key)} style={{
@@ -172,7 +168,7 @@ export default function AnalisePage() {
         ))}
       </div>
 
-      {/* Conteúdo da aba */}
+      {/* Conteudo da aba */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>Carregando...</div>
@@ -187,7 +183,7 @@ export default function AnalisePage() {
                 {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "colecoes" && ["Coleção","Produtos","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "marcas" && ["Marca","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
-                {aba === "vendedores" && ["Loja","Vendedor","Nº Vendas","Peças","Receita","Ticket Médio"].map(h => <th key={h} style={th}>{h}</th>)}
+                {aba === "lojas" && ["Loja","Nº Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {lista.map((row, i) => (
@@ -215,13 +211,12 @@ export default function AnalisePage() {
                       <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                       <td style={{ ...td, textAlign: "center", color: "var(--muted)" }}>{row.num_vendas}</td>
                     </>}
-                    {aba === "vendedores" && <>
-                      <td style={td}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
-                      <td style={{ ...td, fontWeight: 600 }}>#{row.cod_vendedor}</td>
+                    {aba === "lojas" && <>
+                      <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
                       <td style={{ ...td, textAlign: "center" }}>{row.num_vendas}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{Number(row.pecas_vendidas).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita_total)}</td>
-                      <td style={{ ...td, textAlign: "right" }}>{fmtR(row.ticket_medio)}</td>
+                      <td style={{ ...td, textAlign: "center" }}>{Number(row.pecas || 0).toLocaleString("pt-BR")}</td>
+                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
+                      <td style={{ ...td, textAlign: "right", color: Number(row.margem_media) >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>{Number(row.margem_media || 0).toFixed(1)}%</td>
                     </>}
                   </tr>
                 ))}
@@ -234,7 +229,7 @@ export default function AnalisePage() {
   )
 }
 
-// Aba de tamanhos com gráfico de barras (curva de grade)
+// Aba de tamanhos com grafico de barras (curva de grade)
 function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => string }) {
   const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3","34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
   const ordenada = [...lista].sort((a, b) => {
