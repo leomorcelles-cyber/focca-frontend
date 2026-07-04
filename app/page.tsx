@@ -28,7 +28,7 @@ export default function Home() {
       fetch(`${API_URL}/marcas`).then(r => r.json()),
       fetch(`${API_URL}/kpis/lojas`).then(r => r.json()),
     ]).then(([k, m, l]) => {
-      setKpisGlobal(k); setMarcasGlobal(Array.isArray(m) ? m : []); setLojasGlobal(Array.isArray(l) ? l : [])
+      setKpisGlobal(k); setMarcasGlobal(Array.isArray(m) ? m.map((x) => ({ ...x, valor_estoque_total: x.valor_venda_total ?? x.valor_estoque_total })) : []); setLojasGlobal(Array.isArray(l) ? l : [])
     }).catch(() => {})
   }, [])
 
