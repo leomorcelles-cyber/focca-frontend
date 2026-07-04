@@ -40,7 +40,7 @@ export default function TransferenciasPage() {
       if (filtros.marcas.length > 1)  rows = rows.filter(r => filtros.marcas.includes(r.marca))
       if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
       if (filtros.lojas.length > 0) {
-        const nomes = LOJAS.filter(l => filtros.lojas.includes(l.id)).map(l => l.nome.toUpperCase().replace("P.NEREU","NEREU"))
+        const nomes = LOJAS.filter(l => filtros.lojas.includes(l.id)).map(l => ((l as any).matchNome || l.nome).toUpperCase().replace("P.NEREU","NEREU"))
         rows = rows.filter(r =>
           nomes.some(n => r.loja_origem?.toUpperCase().includes(n)) ||
           nomes.some(n => r.loja_destino?.toUpperCase().includes(n))

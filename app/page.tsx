@@ -57,12 +57,18 @@ export default function Home() {
       setDados(rows)
       // KPIs agregados A VENDA (sem truncar) para card/marcas/lojas filtrados
       const pf = new URLSearchParams()
-      if (filtros.marcas.length === 1)  pf.set("marca",  filtros.marcas[0])
-      if (filtros.modelos.length === 1) pf.set("modelo", filtros.modelos[0])
-      if (filtros.sexos.length === 1)   pf.set("sexo",   filtros.sexos[0])
-      if (filtros.anos.length === 1 && !filtros.colecoes.length && !filtros.estacoes.length) pf.set("ano", filtros.anos[0])
-      if (filtros.colecoes.length === 1) pf.set("colecao", filtros.colecoes[0])
-      if (filtros.saldoMax !== null)    pf.set("saldo_max", String(filtros.saldoMax))
+      if (filtros.marcas.length)   pf.set("marca",   filtros.marcas.join(","))
+      if (filtros.modelos.length)  pf.set("modelo",  filtros.modelos.join(","))
+      if (filtros.sexos.length)    pf.set("sexo",    filtros.sexos.join(","))
+      if (filtros.lojas.length)    pf.set("loja",    filtros.lojas.join(","))
+      if (filtros.colecoes.length) {
+        pf.set("colecao", filtros.colecoes.join(","))
+      } else if (filtros.anos.length) {
+        const cols = resolverColecoes(filtros, opPorAno)
+        if (cols.length) pf.set("colecao", cols.join(","))
+        else filtros.anos.forEach(a => pf.append("ano", a))
+      }
+      if (filtros.saldoMax !== null) pf.set("saldo_max", String(filtros.saldoMax))
       try {
         const rf = await fetch(`${API_URL}/kpis/filtrado?${pf}`, { signal: abortRef.current.signal })
         setKpisFiltrado(await rf.json())

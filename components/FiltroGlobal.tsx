@@ -6,6 +6,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
 export const LOJAS = [
   { id: 1, nome: "P.Nereu",  key: "pres_nereu" },
+  { id: 2, nome: "CD",       key: "jaragua_sul", matchNome: "CENTRO DE DISTRIBUI" },
   { id: 3, nome: "Vidal",    key: "vidal_ramos" },
   { id: 4, nome: "Imbuiá",   key: "imbuia" },
   { id: 5, nome: "Lontras",  key: "lontras" },
