@@ -14,7 +14,7 @@ export default function Home() {
   const [buscaFeita, setBuscaFeita] = useState(false)
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
-  // Panorama global sem filtro (estado inicial) â€” vem dos endpoints prontos
+  // Panorama global sem filtro (estado inicial) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â vem dos endpoints prontos
   const [kpisGlobal, setKpisGlobal] = useState<any>({})
   const [marcasGlobal, setMarcasGlobal] = useState<any[]>([])
   const [lojasGlobal, setLojasGlobal] = useState<any[]>([])
@@ -22,7 +22,7 @@ export default function Home() {
 
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
-    // Carrega panorama global de inÃ­cio
+    // Carrega panorama global de inÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio
     Promise.all([
       fetch(`${API_URL}/kpis`).then(r => r.json()),
       fetch(`${API_URL}/marcas`).then(r => r.json()),
@@ -79,7 +79,7 @@ export default function Home() {
     dados.forEach(r => {
       const totalLinha = lojasFiltradas.reduce((s, l) => s + saldoReal(r[l.key]), 0)
       pecas += totalLinha
-      valor += totalLinha * (Number(r.preco_custo) || 0)
+      valor += totalLinha * (Number(r.preco_venda) || 0)
       if (totalLinha <= 2) criticos++
       if (totalLinha > 5) ok++
       if (r.marca) marcas.add(r.marca)
@@ -128,7 +128,7 @@ export default function Home() {
     }).sort((a, b) => b.valor_estoque - a.valor_estoque)
   }, [dados, lojasFiltradas, buscaFeita])
 
-  // Usa calculado se hÃ¡ filtro, senÃ£o usa global
+  // Usa calculado se hÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ filtro, senÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o usa global
   const kpis   = kpisCalc   || kpisGlobal
   const marcas = marcasCalc || marcasGlobal
   const lojas  = lojasCalc  || lojasGlobal
@@ -147,7 +147,7 @@ export default function Home() {
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ marginBottom: "20px" }}>
-        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>VisÃ£o Geral</h1>
+        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>VisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o Geral</h1>
         <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
           {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
         </p>
@@ -157,19 +157,19 @@ export default function Home() {
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-          <div style={{ fontSize: "24px", marginBottom: "12px" }}>â³</div>Carregando...
+          <div style={{ fontSize: "24px", marginBottom: "12px" }}>ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â³</div>Carregando...
         </div>
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: "10px", marginBottom: "24px" }}>
             {[
               { l: "Valor em Estoque", v: fmtRc(kpis.valor_total_estoque), full: fmtR(kpis.valor_total_estoque), c: "var(--primary)" },
-              { l: "PeÃ§as",            v: fmt(kpis.pecas_em_estoque),       c: "var(--success)" },
-              { l: "Margem MÃ©dia",     v: `${kpis.margem_media_pct ?? 0}%`, c: "var(--warning)" },
-              { l: "Em AtenÃ§Ã£o",       v: fmt(kpis.total_criticos),          c: "var(--orange)" },
+              { l: "PeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§as",            v: fmt(kpis.pecas_em_estoque),       c: "var(--success)" },
+              { l: "Margem MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dia",     v: `${kpis.margem_media_pct ?? 0}%`, c: "var(--warning)" },
+              { l: "Em AtenÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o",       v: fmt(kpis.total_criticos),          c: "var(--orange)" },
               { l: "SKUs OK",          v: fmt(kpis.total_ok),                c: "var(--success)" },
               { l: "Marcas",           v: kpis.total_marcas ?? 0 },
-              { l: "ColeÃ§Ãµes",         v: kpis.total_colecoes ?? 0 },
+              { l: "ColeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes",         v: kpis.total_colecoes ?? 0 },
               { l: "Modelos",          v: kpis.total_modelos ?? 0 },
             ].map((k: any, i) => (
               <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 16px", minWidth: 0, overflow: "hidden" }}>
@@ -212,7 +212,7 @@ export default function Home() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
-                    {["Loja","SKUs","PeÃ§as","Valor Estoque","Margem"].map(h => (
+                    {["Loja","SKUs","PeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§as","Valor Estoque","Margem"].map(h => (
                       <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: "var(--muted)", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -222,11 +222,11 @@ export default function Home() {
                     <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                       <td style={{ padding: "12px 14px" }}>
                         <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.nome_loja}</div>
-                        {l.cidade && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>}
+                        {l.cidade && !String(l.nome_loja).includes("CENTRO DE DISTRIBUI") && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>}
                       </td>
                       <td style={{ padding: "12px 14px" }}>{fmt(l.total_skus)}</td>
                       <td style={{ padding: "12px 14px" }}>{fmt(l.total_pecas)}</td>
-                      <td style={{ padding: "12px 14px", color: "var(--primary)", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtR(l.valor_estoque)}</td>
+                      <td style={{ padding: "12px 14px", color: "var(--primary)", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtR(l.valor_venda_potencial ?? l.valor_estoque)}</td>
                       <td style={{ padding: "12px 14px", color: Number(l.margem_media_pct) > 0 ? "var(--success)" : "var(--danger)", fontWeight: 500 }}>{l.margem_media_pct}%</td>
                     </tr>
                   ))}
