@@ -147,7 +147,7 @@ export default function Home() {
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ marginBottom: "20px" }}>
-        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>VisÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o Geral</h1>
+        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
         <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
           {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
         </p>
@@ -164,12 +164,12 @@ export default function Home() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: "10px", marginBottom: "24px" }}>
             {[
               { l: "Valor em Estoque", v: fmtRc(kpis.valor_total_estoque), full: fmtR(kpis.valor_total_estoque), c: "var(--primary)" },
-              { l: "PeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§as",            v: fmt(kpis.pecas_em_estoque),       c: "var(--success)" },
-              { l: "Margem MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dia",     v: `${kpis.margem_media_pct ?? 0}%`, c: "var(--warning)" },
-              { l: "Em AtenÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o",       v: fmt(kpis.total_criticos),          c: "var(--orange)" },
+              { l: "Peças",            v: fmt(kpis.pecas_em_estoque),       c: "var(--success)" },
+              { l: "Margem Média",     v: `${kpis.margem_media_pct ?? 0}%`, c: "var(--warning)" },
+              { l: "Em Atenção",       v: fmt(kpis.total_criticos),          c: "var(--orange)" },
               { l: "SKUs OK",          v: fmt(kpis.total_ok),                c: "var(--success)" },
               { l: "Marcas",           v: kpis.total_marcas ?? 0 },
-              { l: "ColeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes",         v: kpis.total_colecoes ?? 0 },
+              { l: "Coleções",         v: kpis.total_colecoes ?? 0 },
               { l: "Modelos",          v: kpis.total_modelos ?? 0 },
             ].map((k: any, i) => (
               <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 16px", minWidth: 0, overflow: "hidden" }}>
@@ -212,7 +212,7 @@ export default function Home() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
-                    {["Loja","SKUs","PeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§as","Valor Estoque","Margem"].map(h => (
+                    {["Loja","SKUs","Peças","Valor Estoque","Margem"].map(h => (
                       <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: "var(--muted)", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
