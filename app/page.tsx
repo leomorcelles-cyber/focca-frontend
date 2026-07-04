@@ -160,7 +160,7 @@ export default function Home() {
           total_pecas: Number(kpisFiltrado.lojas[keyPc]) || 0,
           valor_estoque: Number(kpisFiltrado.lojas[keyV]) || 0,
           valor_venda_potencial: Number(kpisFiltrado.lojas[keyV]) || 0,
-          total_skus: null,
+          total_skus: Number(kpisFiltrado.lojas[`${l.key}_sk`]) || 0,
           margem_media_pct: kpis?.margem_media_pct ?? "0",
         }
       }).filter(x => x.total_pecas > 0 || x.valor_estoque > 0)
