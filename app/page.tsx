@@ -161,7 +161,7 @@ export default function Home() {
           valor_estoque: Number(kpisFiltrado.lojas[keyV]) || 0,
           valor_venda_potencial: Number(kpisFiltrado.lojas[keyV]) || 0,
           total_skus: Number(kpisFiltrado.lojas[`${l.key}_sk`]) || 0,
-          margem_media_pct: kpis?.margem_media_pct ?? "0",
+          margem_media_pct: kpisFiltrado.lojas[`${l.key}_mg`] ?? "0",
         }
       }).filter(x => x.total_pecas > 0 || x.valor_estoque > 0)
       .sort((a, b) => b.valor_estoque - a.valor_estoque)
