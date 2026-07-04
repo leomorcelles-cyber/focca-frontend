@@ -14,15 +14,16 @@ export default function Home() {
   const [buscaFeita, setBuscaFeita] = useState(false)
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
-  // Panorama global sem filtro (estado inicial) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â vem dos endpoints prontos
+  // Panorama global sem filtro (estado inicial)
   const [kpisGlobal, setKpisGlobal] = useState<any>({})
   const [marcasGlobal, setMarcasGlobal] = useState<any[]>([])
+  const [kpisFiltrado, setKpisFiltrado] = useState<any>(null)
   const [lojasGlobal, setLojasGlobal] = useState<any[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
-    // Carrega panorama global de inÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio
+    // Carrega panorama global de inicio
     Promise.all([
       fetch(`${API_URL}/kpis`).then(r => r.json()),
       fetch(`${API_URL}/marcas`).then(r => r.json()),
@@ -54,6 +55,18 @@ export default function Home() {
       if (filtros.anos.length > 1)    rows = rows.filter(r => filtros.anos.includes(r.ano_colecao))
       if (colecoesAlvo.length)        rows = rows.filter(r => colecoesAlvo.includes(r.colecao))
       setDados(rows)
+      // KPIs agregados A VENDA (sem truncar) para card/marcas/lojas filtrados
+      const pf = new URLSearchParams()
+      if (filtros.marcas.length === 1)  pf.set("marca",  filtros.marcas[0])
+      if (filtros.modelos.length === 1) pf.set("modelo", filtros.modelos[0])
+      if (filtros.sexos.length === 1)   pf.set("sexo",   filtros.sexos[0])
+      if (filtros.anos.length === 1 && !filtros.colecoes.length && !filtros.estacoes.length) pf.set("ano", filtros.anos[0])
+      if (filtros.colecoes.length === 1) pf.set("colecao", filtros.colecoes[0])
+      if (filtros.saldoMax !== null)    pf.set("saldo_max", String(filtros.saldoMax))
+      try {
+        const rf = await fetch(`${API_URL}/kpis/filtrado?${pf}`, { signal: abortRef.current.signal })
+        setKpisFiltrado(await rf.json())
+      } catch { setKpisFiltrado(null) }
     } catch(e: any) { if (e?.name !== "AbortError") console.error(e) }
     finally { setLoading(false) }
   }
@@ -62,6 +75,7 @@ export default function Home() {
     const temFiltro = filtros.lojas.length || filtros.sexos.length || filtros.modelos.length ||
       filtros.marcas.length || filtros.anos.length || filtros.colecoes.length || filtros.saldoMax !== null
     if (temFiltro) buscar()
+    else setKpisFiltrado(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versaoBusca])
 
@@ -128,10 +142,25 @@ export default function Home() {
     }).sort((a, b) => b.valor_estoque - a.valor_estoque)
   }, [dados, lojasFiltradas, buscaFeita])
 
-  // Usa calculado se hÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ filtro, senÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o usa global
-  const kpis   = kpisCalc   || kpisGlobal
-  const marcas = marcasCalc || marcasGlobal
-  const lojas  = lojasCalc  || lojasGlobal
+  // Usa agregado do backend se ha filtro, senao global
+  // Quando ha filtro, usa os agregados do backend (corretos, a venda, sem truncar)
+  const kpis   = kpisFiltrado?.kpis   || kpisCalc   || kpisGlobal
+  const marcas = (kpisFiltrado?.marcas) || marcasCalc || marcasGlobal
+  const lojasBackend = kpisFiltrado?.lojas
+    ? LOJAS.filter(l => filtros.lojas.length === 0 || filtros.lojas.includes(l.id)).map(l => {
+        const keyPc = `${l.key}_pc`, keyV = `${l.key}_v`
+        return {
+          nome_loja: l.nome,
+          total_pecas: Number(kpisFiltrado.lojas[keyPc]) || 0,
+          valor_estoque: Number(kpisFiltrado.lojas[keyV]) || 0,
+          valor_venda_potencial: Number(kpisFiltrado.lojas[keyV]) || 0,
+          total_skus: null,
+          margem_media_pct: kpis?.margem_media_pct ?? "0",
+        }
+      }).filter(x => x.total_pecas > 0 || x.valor_estoque > 0)
+      .sort((a, b) => b.valor_estoque - a.valor_estoque)
+    : null
+  const lojas  = lojasBackend || lojasCalc  || lojasGlobal
 
   const fmt = (n: number) => n != null ? Number(n).toLocaleString("pt-BR") : "0"
   const fmtRc = (n: number) => {
@@ -157,7 +186,7 @@ export default function Home() {
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-          <div style={{ fontSize: "24px", marginBottom: "12px" }}>ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â³</div>Carregando...
+          <div style={{ fontSize: "24px", marginBottom: "12px" }}>⏳</div>Carregando...
         </div>
       ) : (
         <>
