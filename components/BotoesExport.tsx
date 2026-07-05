@@ -1,65 +1,86 @@
 "use client"
-// Botoes de exportacao flutuantes (canto inferior direito).
-// PDF: print client-side da area de conteudo (so o conteudo, sem filtro global).
-// CSV/Excel: delegados a um callback que a pagina fornece (dados prontos -> backend).
-import { useState } from "react"
+// Menu de exportacao compacto: um unico botao "Exportar" que abre um dropdown
+// com PDF (print client-side), Excel e CSV (dados via callback da pagina).
+import { useState, useRef, useEffect } from "react"
 import { exportarPDF } from "@/lib/exportPdf"
 
 type Props = {
-  /** id do elemento a fotografar no PDF */
   areaId: string
-  /** titulo base do arquivo */
   titulo: string
-  /** callback opcional para CSV/Excel (recebe o formato). Se ausente, botao nao aparece. */
   onExportarDados?: (formato: "csv" | "xlsx") => void | Promise<void>
 }
 
 export default function BotoesExport({ areaId, titulo, onExportarDados }: Props) {
+  const [aberto, setAberto] = useState(false)
   const [ocupado, setOcupado] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
 
-  async function pdf() {
-    setOcupado("pdf")
-    try { await exportarPDF(areaId, titulo) }
-    finally { setOcupado(null) }
+  // fecha ao clicar fora
+  useEffect(() => {
+    function fora(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+    }
+    document.addEventListener("mousedown", fora)
+    return () => document.removeEventListener("mousedown", fora)
+  }, [])
+
+  async function acao(fn: () => void | Promise<void>, tag: string) {
+    setOcupado(tag)
+    try { await fn() } finally { setOcupado(null); setAberto(false) }
   }
 
-  async function dados(fmt: "csv" | "xlsx") {
-    if (!onExportarDados) return
-    setOcupado(fmt)
-    try { await onExportarDados(fmt) }
-    finally { setOcupado(null) }
-  }
-
-  const btn = {
-    padding: "8px 14px", borderRadius: "10px", border: "1px solid var(--border)",
-    background: "var(--surface)", color: "var(--text)", cursor: "pointer",
-    fontSize: "12px", fontWeight: 600 as const, boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+  const item = {
+    display: "flex", alignItems: "center", gap: "8px", width: "100%",
+    padding: "9px 14px", background: "none", border: "none", cursor: "pointer",
+    fontSize: "13px", color: "var(--text)", textAlign: "left" as const,
     whiteSpace: "nowrap" as const,
   }
 
   return (
-    <div style={{
-      position: "fixed", bottom: "20px", right: "20px", zIndex: 50,
-      display: "flex", gap: "8px", flexDirection: "column", alignItems: "flex-end",
-    }}>
-      <div style={{ display: "flex", gap: "8px" }}>
-        <button onClick={pdf} disabled={ocupado !== null} style={btn}
-          title="Exportar visao atual como PDF">
-          {ocupado === "pdf" ? "Gerando..." : "PDF"}
-        </button>
-        {onExportarDados && (
-          <>
-            <button onClick={() => dados("xlsx")} disabled={ocupado !== null} style={btn}
-              title="Exportar dados em Excel">
-              {ocupado === "xlsx" ? "..." : "Excel"}
-            </button>
-            <button onClick={() => dados("csv")} disabled={ocupado !== null} style={btn}
-              title="Exportar dados em CSV">
-              {ocupado === "csv" ? "..." : "CSV"}
-            </button>
-          </>
-        )}
-      </div>
+    <div ref={ref} className="no-print" style={{ position: "relative", display: "inline-block" }}>
+      <button
+        onClick={() => setAberto(a => !a)}
+        style={{
+          padding: "8px 14px", background: "var(--primary)", color: "#fff",
+          border: "none", borderRadius: "8px", cursor: "pointer",
+          fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px",
+        }}
+      >
+        ⬇ Exportar ▾
+      </button>
+
+      {aberto && (
+        <div style={{
+          position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 100,
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "10px", boxShadow: "0 6px 24px rgba(0,0,0,0.18)",
+          overflow: "hidden", minWidth: "170px",
+        }}>
+          <button style={item} disabled={ocupado !== null}
+            onClick={() => acao(() => exportarPDF(areaId, titulo), "pdf")}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+            {ocupado === "pdf" ? "⏳ Gerando PDF..." : "📄 PDF (visual da tela)"}
+          </button>
+
+          {onExportarDados && (
+            <>
+              <button style={item} disabled={ocupado !== null}
+                onClick={() => acao(() => onExportarDados("xlsx"), "xlsx")}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                {ocupado === "xlsx" ? "⏳ Gerando Excel..." : "📊 Excel (dados)"}
+              </button>
+              <button style={item} disabled={ocupado !== null}
+                onClick={() => acao(() => onExportarDados("csv"), "csv")}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                {ocupado === "csv" ? "⏳ Gerando CSV..." : "📁 CSV (dados)"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

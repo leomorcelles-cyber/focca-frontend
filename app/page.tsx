@@ -189,11 +189,14 @@ export default function Home() {
 
   return (
     <div id="area-export" style={{ maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ marginBottom: "20px" }}>
-        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
-        <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
-          {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
-        </p>
+      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
+          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
+            {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
+          </p>
+        </div>
+        <BotoesExport areaId="area-export" titulo="Visão Geral" />
       </div>
 
       <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo /></div>
@@ -279,7 +282,6 @@ export default function Home() {
           </div>
         </>
       )}
-      <BotoesExport areaId="area-export" titulo="Visao Geral" />
     </div>
   )
 }

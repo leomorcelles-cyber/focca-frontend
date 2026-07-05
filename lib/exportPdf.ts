@@ -13,9 +13,9 @@ export async function exportarPDF(elementId: string, titulo: string) {
     return
   }
 
-  // esconde elementos marcados com data-no-export (dentro da area)
+  // esconde elementos marcados com data-no-export OU classe no-print
   const escondidos: HTMLElement[] = Array.from(
-    el.querySelectorAll<HTMLElement>("[data-no-export]")
+    el.querySelectorAll<HTMLElement>("[data-no-export], .no-print")
   )
   const displayAntigo = escondidos.map(e => e.style.display)
   escondidos.forEach(e => { e.style.display = "none" })
