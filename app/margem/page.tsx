@@ -35,6 +35,9 @@ export default function MargemPage() {
 
     const p = new URLSearchParams({ limite: "15000", ordem })
     if (filtros.marcas.length)  p.set("marca",  filtros.marcas.join(","))
+    if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
+    if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
+    if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
     if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
     if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
 
