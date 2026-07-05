@@ -41,8 +41,8 @@ export default function BotoesExport({ areaId, titulo, onExportarDados }: Props)
       <button
         onClick={() => setAberto(a => !a)}
         style={{
-          padding: "8px 14px", background: "var(--primary)", color: "#fff",
-          border: "none", borderRadius: "8px", cursor: "pointer",
+          padding: "8px 14px", background: "var(--surface)", color: "var(--text)",
+          border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer",
           fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px",
         }}
       >
