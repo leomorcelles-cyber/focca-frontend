@@ -33,10 +33,10 @@ export default function MargemPage() {
     abortRef.current = new AbortController()
     setDados([]); setLoading(true); setBuscaFeita(true)
 
-    const p = new URLSearchParams({ limite: "2000", ordem })
-    if (filtros.marcas.length === 1)  p.set("marca",  filtros.marcas[0])
-    if (filtros.modelos.length === 1) p.set("modelo", filtros.modelos[0])
-    if (filtros.sexos.length === 1)   p.set("sexo",   filtros.sexos[0])
+    const p = new URLSearchParams({ limite: "15000", ordem })
+    if (filtros.marcas.length)  p.set("marca",  filtros.marcas.join(","))
+    if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
+    if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
 
     try {
       const res = await fetch(`${API_URL}/margem?${p}`, { signal: abortRef.current.signal })
