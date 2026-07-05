@@ -253,11 +253,12 @@ export default function ComprasPage() {
     setDados([]); setLoading(true); setBuscaFeita(true); setMarcaSel("GERAL"); setStatusFiltro([])
 
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
-    const p = new URLSearchParams({ limite: "3000" })
-    if (filtros.marcas.length === 1)  p.set("marca",  filtros.marcas[0])
-    if (filtros.modelos.length === 1) p.set("modelo", filtros.modelos[0])
-    if (filtros.sexos.length === 1)   p.set("sexo",   filtros.sexos[0])
-    if (filtros.anos.length === 1 && !filtros.colecoes.length && !filtros.estacoes.length) p.set("ano", filtros.anos[0])
+    const p = new URLSearchParams({ limite: "15000" })
+    if (filtros.marcas.length)  p.set("marca",  filtros.marcas.join(","))
+    if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
+    if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
+    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
+    else if (filtros.anos.length && !filtros.estacoes.length) p.set("ano", filtros.anos.join(","))
     if (filtros.saldoMax !== null)    p.set("saldo_max", String(filtros.saldoMax))
 
     try {
@@ -339,8 +340,8 @@ export default function ComprasPage() {
     const p = new URLSearchParams()
     if (marcaSel !== "GERAL") p.set("marca", marcaSel)
     else if (filtros.marcas.length === 1) p.set("marca", filtros.marcas[0])
-    if (filtros.modelos.length === 1) p.set("modelo", filtros.modelos[0])
-    if (filtros.sexos.length === 1)   p.set("sexo",   filtros.sexos[0])
+    if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
+    if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
     if (filtros.colecoes.length === 1) p.set("colecao", filtros.colecoes[0])
     if (filtros.lojas.length === 1)   p.set("loja",   String(filtros.lojas[0]))
     window.open(`${API_URL}/export/matriz?${p}`)
