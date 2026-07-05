@@ -187,6 +187,80 @@ export default function Home() {
 
   const temFiltroAtivo = buscaFeita && dados.length > 0
 
+  // Descricao textual dos filtros aplicados (cabecalho do export)
+  const descricaoFiltros = useMemo(() => {
+    const partes: string[] = []
+    if (filtros.marcas.length)   partes.push(`Marca: ${filtros.marcas.join(", ")}`)
+    if (filtros.modelos.length)  partes.push(`Modelo: ${filtros.modelos.join(", ")}`)
+    if (filtros.sexos.length)    partes.push(`Sexo: ${filtros.sexos.join(", ")}`)
+    if (filtros.cores.length)    partes.push(`Cor: ${filtros.cores.join(", ")}`)
+    if (filtros.colecoes.length) partes.push(`Colecao: ${filtros.colecoes.join(", ")}`)
+    if (filtros.anos.length)     partes.push(`Ano: ${filtros.anos.join(", ")}`)
+    if (filtros.lojas.length)    partes.push(`Lojas: ${filtros.lojas.length} selec.`)
+    if (filtros.ids.trim())      partes.push(`IDs: ${filtros.ids}`)
+    if (filtros.saldoMax !== null) partes.push(`Saldo max: ${filtros.saldoMax}`)
+    return partes.length ? partes.join(" | ") : "Sem filtros (rede completa)"
+  }, [filtros])
+
+  async function exportarDados(formato: "csv" | "xlsx") {
+    const secoes: any[] = []
+    // Indicadores
+    if (kpis) {
+      secoes.push({
+        titulo: "Indicadores",
+        colunas: ["Metrica", "Valor"],
+        linhas: [
+          ["Valor em Estoque", fmtRc(kpis.valor_total_estoque)],
+          ["Pecas em Estoque", fmt(kpis.pecas_em_estoque)],
+          ["Margem Media", (kpis.margem_media_pct ?? "-") + "%"],
+          ["Total SKUs", fmt(kpis.total_skus)],
+          ["Marcas", fmt(kpis.total_marcas)],
+          ["Colecoes", fmt(kpis.total_colecoes)],
+          ["Modelos", fmt(kpis.total_modelos)],
+          ["Em Atencao", fmt(kpis.total_criticos)],
+          ["SKUs OK", fmt(kpis.total_ok)],
+        ],
+      })
+    }
+    // Top Marcas
+    if (marcas && marcas.length) {
+      secoes.push({
+        titulo: "Top Marcas",
+        colunas: ["#", "Marca", "Valor em Estoque"],
+        linhas: marcas.slice(0, 20).map((m: any, i: number) =>
+          [i + 1, m.marca, fmtRc(m.valor_estoque_total)]),
+      })
+    }
+    // Resumo por Loja
+    if (lojas && lojas.length) {
+      secoes.push({
+        titulo: "Resumo por Loja",
+        colunas: ["Loja", "SKUs", "Pecas", "Valor Estoque", "Margem %"],
+        linhas: lojas.map((l: any) =>
+          [l.nome_loja, l.total_skus ?? "-", fmt(l.total_pecas),
+           fmtR(l.valor_venda_potencial ?? l.valor_estoque), (l.margem_media_pct ?? "-") + "%"]),
+      })
+    }
+    if (!secoes.length) { alert("Nada para exportar ainda."); return }
+
+    const body = { titulo: "Visao Geral", formato, filtros: descricaoFiltros, secoes }
+    try {
+      const res = await fetch(`${API_URL}/export/inteligente`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { alert("Falha ao gerar o arquivo."); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Visao_Geral_${new Date().toISOString().slice(0, 10)}.${formato}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { alert("Erro de rede ao exportar.") }
+  }
+
   return (
     <div id="area-export" style={{ maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
@@ -196,7 +270,7 @@ export default function Home() {
             {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
           </p>
         </div>
-        <BotoesExport areaId="area-export" titulo="Visão Geral" />
+        <BotoesExport areaId="area-export" titulo="Visão Geral" onExportarDados={exportarDados} />
       </div>
 
       <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo /></div>
