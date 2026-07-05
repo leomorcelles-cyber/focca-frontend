@@ -22,3 +22,66 @@ html {
 
 @import "tailwindcss";
 
+/* ===================== IMPRESSAO / EXPORT PDF ===================== */
+/* Adicionar ao final de app/globals.css.
+   Estrategia: ao imprimir, esconde navegacao/filtros/menus (.no-print),
+   mostra so o conteudo, e evita cortar blocos no meio. */
+
+@media print {
+  /* esconde tudo marcado como no-print (filtro global, menu export, navbar) */
+  .no-print,
+  [data-no-export],
+  nav,
+  aside {
+    display: none !important;
+  }
+
+  /* remove fundos escuros/cores de tela para economizar tinta e ficar legivel */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* o container de conteudo ocupa a pagina inteira */
+  #area-export {
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* NUNCA cortar estes blocos no meio de uma pagina */
+  .bloco-print,
+  table,
+  tr,
+  .card-kpi {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* tabelas: repetir cabecalho em cada pagina */
+  thead {
+    display: table-header-group;
+  }
+
+  /* evita quebrar logo apos um titulo (orfao) */
+  h1, h2, h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* margens da pagina impressa */
+  @page {
+    margin: 12mm 10mm;
+    size: A4;
+  }
+
+  /* garante que cores de fundo importantes (badges, headers de tabela) saiam */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
