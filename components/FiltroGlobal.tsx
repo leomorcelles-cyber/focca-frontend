@@ -52,10 +52,29 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const [aberto, setAberto] = useState(true)
   const prodTimer = useRef<any>(null)
 
+  // Colecoes-por-ano: carga unica
   useEffect(() => {
-    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => { setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []); setOpCores(f.cores || []) }).catch(() => {})
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
   }, [])
+
+  // Opcoes EM CASCATA: rebusca /filtros com os filtros ativos (debounce 250ms)
+  const cascataTimer = useRef<any>(null)
+  useEffect(() => {
+    if (cascataTimer.current) clearTimeout(cascataTimer.current)
+    cascataTimer.current = setTimeout(() => {
+      const q = new URLSearchParams()
+      if (filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
+      if (filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
+      if (filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
+      if (filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
+      if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
+      if (filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
+      fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).then(f => {
+        setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []); setOpCores(f.cores || [])
+      }).catch(() => {})
+    }, 250)
+    return () => { if (cascataTimer.current) clearTimeout(cascataTimer.current) }
+  }, [filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos])
 
   // Busca de produtos server-side (debounce 300ms)
   useEffect(() => {
@@ -96,20 +115,32 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
 
   const modelosVis = useMemo(() => {
     if (!buscaModelo && filtros.modelos.length === 0) return []
-    if (buscaModelo) return opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase())).slice(0, 20)
-    return opModelos.filter(m => filtros.modelos.includes(m))
+    if (buscaModelo) {
+      const achados = opModelos.filter(m => m.toLowerCase().includes(buscaModelo.toLowerCase())).slice(0, 20)
+      const selForaBusca = filtros.modelos.filter(m => !achados.includes(m))
+      return [...selForaBusca, ...achados]
+    }
+    return filtros.modelos
   }, [opModelos, buscaModelo, filtros.modelos])
 
   const marcasVis = useMemo(() => {
     if (!buscaMarca && filtros.marcas.length === 0) return []
-    if (buscaMarca) return opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase())).slice(0, 20)
-    return opMarcas.filter(m => filtros.marcas.includes(m))
+    if (buscaMarca) {
+      const achados = opMarcas.filter(m => m.toLowerCase().includes(buscaMarca.toLowerCase())).slice(0, 20)
+      const selForaBusca = filtros.marcas.filter(m => !achados.includes(m))
+      return [...selForaBusca, ...achados]
+    }
+    return filtros.marcas
   }, [opMarcas, buscaMarca, filtros.marcas])
 
   const coresVis = useMemo(() => {
     if (!buscaCor && filtros.cores.length === 0) return []
-    if (buscaCor) return opCores.filter(c => c.toLowerCase().includes(buscaCor.toLowerCase())).slice(0, 20)
-    return opCores.filter(c => filtros.cores.includes(c))
+    if (buscaCor) {
+      const achados = opCores.filter(c => c.toLowerCase().includes(buscaCor.toLowerCase())).slice(0, 20)
+      const selForaBusca = filtros.cores.filter(c => !achados.includes(c))
+      return [...selForaBusca, ...achados]
+    }
+    return filtros.cores
   }, [opCores, buscaCor, filtros.cores])
 
   // Produtos visiveis: os selecionados + resultados da busca server-side
