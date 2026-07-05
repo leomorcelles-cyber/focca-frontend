@@ -39,11 +39,13 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
 
   const [opModelos, setOpModelos] = useState<string[]>([])
   const [opMarcas,  setOpMarcas]  = useState<string[]>([])
+  const [opCores,   setOpCores]   = useState<string[]>([])
   const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
   const [opAnos,    setOpAnos]    = useState<string[]>([])
 
   const [buscaModelo,  setBuscaModelo]  = useState("")
   const [buscaMarca,   setBuscaMarca]   = useState("")
+  const [buscaCor,     setBuscaCor]     = useState("")
   const [buscaColecao, setBuscaColecao] = useState("")
   const [buscaProduto, setBuscaProduto] = useState("")
   const [resProdutos,  setResProdutos]  = useState<string[]>([])  // resultados da busca server-side
@@ -51,7 +53,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const prodTimer = useRef<any>(null)
 
   useEffect(() => {
-    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => { setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []) }).catch(() => {})
+    fetch(`${API_URL}/filtros`).then(r => r.json()).then(f => { setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []); setOpCores(f.cores || []) }).catch(() => {})
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
   }, [])
 
@@ -104,6 +106,12 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     return opMarcas.filter(m => filtros.marcas.includes(m))
   }, [opMarcas, buscaMarca, filtros.marcas])
 
+  const coresVis = useMemo(() => {
+    if (!buscaCor && filtros.cores.length === 0) return []
+    if (buscaCor) return opCores.filter(c => c.toLowerCase().includes(buscaCor.toLowerCase())).slice(0, 20)
+    return opCores.filter(c => filtros.cores.includes(c))
+  }, [opCores, buscaCor, filtros.cores])
+
   // Produtos visiveis: os selecionados + resultados da busca server-side
   const produtosVis = useMemo(() => {
     const sel = filtros.produtos
@@ -116,11 +124,11 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
 
   const totalFiltros = filtros.lojas.length + filtros.sexos.length + filtros.modelos.length +
     filtros.produtos.length + filtros.marcas.length + filtros.anos.length + filtros.estacoes.length +
-    filtros.colecoes.length + (filtros.saldoMax !== null ? 1 : 0)
+    filtros.colecoes.length + filtros.cores.length + (filtros.ids ? 1 : 0) + (filtros.saldoMax !== null ? 1 : 0)
 
   function limpar() {
     setFiltros({ ...filtroVazio })
-    setBuscaModelo(""); setBuscaMarca(""); setBuscaColecao(""); setBuscaProduto(""); setResProdutos([])
+    setBuscaModelo(""); setBuscaMarca(""); setBuscaCor(""); setBuscaColecao(""); setBuscaProduto(""); setResProdutos([])
   }
 
   return (
@@ -181,6 +189,19 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
                 {marcasVis.map(m => <Chip key={m} label={m} small ativo={filtros.marcas.includes(m)} onClick={() => up({ marcas: toggle(filtros.marcas, m) })} />)}
               </div>
             )}
+          </div>
+          <div>
+            <label style={lbl}>Cor {filtros.cores.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.cores.length}</span>}</label>
+            <input placeholder={`Buscar entre ${opCores.length} cores...`} value={buscaCor} onChange={e => setBuscaCor(e.target.value)} style={inp} />
+            {(buscaCor || filtros.cores.length > 0) && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {coresVis.map(c => <Chip key={c} label={c} small ativo={filtros.cores.includes(c)} onClick={() => up({ cores: toggle(filtros.cores, c) })} />)}
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={lbl}>Busca por ID {filtros.ids && <span style={{ color: "var(--primary)" }}>· ativo</span>}</label>
+            <input placeholder="IDs exatos, separados por virgula ou espaco" value={filtros.ids} onChange={e => up({ ids: e.target.value })} style={inp} />
           </div>
           <div>
             <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>

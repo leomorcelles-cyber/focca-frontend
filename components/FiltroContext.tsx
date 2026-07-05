@@ -11,12 +11,14 @@ export type FiltroState = {
   anos: string[]
   estacoes: string[]
   colecoes: string[]
+  cores: string[]
+  ids: string
   saldoMax: number | null
 }
 
 export const filtroVazio: FiltroState = {
   lojas: [], sexos: [], modelos: [], produtos: [], marcas: [],
-  anos: [], estacoes: [], colecoes: [], saldoMax: null,
+  anos: [], estacoes: [], colecoes: [], cores: [], ids: "", saldoMax: null,
 }
 
 type FiltroContextType = {
