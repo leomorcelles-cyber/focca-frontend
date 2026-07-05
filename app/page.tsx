@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useMemo, useRef } from "react"
+import BotoesExport from "@/components/BotoesExport"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
 
@@ -187,7 +188,7 @@ export default function Home() {
   const temFiltroAtivo = buscaFeita && dados.length > 0
 
   return (
-    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
+    <div id="area-export" style={{ maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ marginBottom: "20px" }}>
         <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
         <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
@@ -195,7 +196,7 @@ export default function Home() {
         </p>
       </div>
 
-      <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
+      <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo /></div>
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
@@ -278,6 +279,7 @@ export default function Home() {
           </div>
         </>
       )}
+      <BotoesExport areaId="area-export" titulo="Visao Geral" />
     </div>
   )
 }
