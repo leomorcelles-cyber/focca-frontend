@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.1",
     "@tanstack/react-virtual": "^3.14.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

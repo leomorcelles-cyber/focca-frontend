@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import "./globals.css"
-import Sidebar from "@/components/Sidebar"
 import ThemeProvider from "@/components/ThemeProvider"
 import { FiltroProvider } from "@/components/FiltroContext"
 import { SelecaoProvider } from "@/components/SelecaoContext"
-import CarrinhoPainel from "@/components/CarrinhoPainel"
+import AppShell from "@/components/AppShell"
 
 export const metadata: Metadata = {
   title: "Focca Jeans - Sistema de Estoque",
@@ -18,13 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <FiltroProvider>
             <SelecaoProvider>
-              <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg)" }}>
-                <Sidebar />
-                <main style={{ flex: 1, padding: "32px 28px", minWidth: 0, overflowX: "hidden" }}>
-                  {children}
-                </main>
-              </div>
-              <CarrinhoPainel />
+              <AppShell>{children}</AppShell>
             </SelecaoProvider>
           </FiltroProvider>
         </ThemeProvider>
