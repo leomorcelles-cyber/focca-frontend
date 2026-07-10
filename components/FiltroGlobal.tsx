@@ -1,6 +1,7 @@
 "use client"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useFiltros, FiltroState, filtroVazio } from "@/components/FiltroContext"
+import FiltrosSalvos from "@/components/FiltrosSalvos"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -173,6 +174,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           <button onClick={handleBuscar} disabled={loading} style={{ padding: "8px 20px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
             {loading ? "Buscando..." : "🔍 Buscar"}
           </button>
+          <FiltrosSalvos />
         </div>
       </div>
 
