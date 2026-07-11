@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
 import { supabase } from "@/lib/supabase"
 
 // Tipo do estado de filtros — compartilhado por todas as paginas
@@ -7,7 +7,7 @@ export type FiltroState = {
   lojas: number[]
   sexos: string[]
   modelos: string[]
-  produtos: string[]   // produtos (descricao_basica), multi-selecao
+  produtos: string[]
   marcas: string[]
   anos: string[]
   estacoes: string[]
@@ -22,7 +22,6 @@ export const filtroVazio: FiltroState = {
   anos: [], estacoes: [], colecoes: [], cores: [], ids: "", saldoMax: null,
 }
 
-// Filtro salvo (vem do Supabase)
 export type FiltroSalvo = {
   id: string
   nome: string
@@ -30,12 +29,25 @@ export type FiltroSalvo = {
   criado_em: string
 }
 
+const LS_KEY = "focca_filtro_atual"  // chave da persistencia F5
+
+function lerFiltroSalvoLocal(): FiltroState | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(LS_KEY)
+    if (!raw) return null
+    const obj = JSON.parse(raw)
+    return { ...filtroVazio, ...obj }
+  } catch {
+    return null
+  }
+}
+
 type FiltroContextType = {
   filtros: FiltroState
   setFiltros: (f: FiltroState) => void
   versaoBusca: number
   dispararBusca: () => void
-  // --- filtros salvos (Supabase, por usuario) ---
   filtrosSalvos: FiltroSalvo[]
   carregandoSalvos: boolean
   salvarFiltro: (nome: string) => Promise<{ ok: boolean; erro?: string }>
@@ -47,14 +59,27 @@ type FiltroContextType = {
 const FiltroContext = createContext<FiltroContextType | null>(null)
 
 export function FiltroProvider({ children }: { children: ReactNode }) {
-  const [filtros, setFiltros] = useState<FiltroState>({ ...filtroVazio })
+  const [filtros, setFiltrosState] = useState<FiltroState>({ ...filtroVazio })
   const [versaoBusca, setVersaoBusca] = useState(0)
   const [filtrosSalvos, setFiltrosSalvos] = useState<FiltroSalvo[]>([])
   const [carregandoSalvos, setCarregandoSalvos] = useState(false)
 
+  // --- PERSISTENCIA F5: restaura o filtro do localStorage ao montar ---
+  useEffect(() => {
+    const salvo = lerFiltroSalvoLocal()
+    if (salvo) setFiltrosState(salvo)
+  }, [])
+
+  // setFiltros que tambem persiste no localStorage
+  const setFiltros = useCallback((f: FiltroState) => {
+    setFiltrosState(f)
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(LS_KEY, JSON.stringify(f)) } catch {}
+    }
+  }, [])
+
   function dispararBusca() { setVersaoBusca(v => v + 1) }
 
-  // Busca os filtros salvos do usuario logado
   const recarregarSalvos = useCallback(async () => {
     setCarregandoSalvos(true)
     try {
@@ -73,14 +98,12 @@ export function FiltroProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Carrega ao montar e sempre que o login muda
   useEffect(() => {
     recarregarSalvos()
     const { data: sub } = supabase.auth.onAuthStateChange(() => { recarregarSalvos() })
     return () => { sub.subscription.unsubscribe() }
   }, [recarregarSalvos])
 
-  // Salva o filtro atual com um nome
   async function salvarFiltro(nome: string): Promise<{ ok: boolean; erro?: string }> {
     const nomeLimpo = nome.trim()
     if (!nomeLimpo) return { ok: false, erro: "Dê um nome ao filtro." }
@@ -101,7 +124,6 @@ export function FiltroProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Aplica um filtro salvo (restaura o estado e dispara a busca)
   function aplicarFiltroSalvo(id: string) {
     const salvo = filtrosSalvos.find(f => f.id === id)
     if (salvo) {
@@ -110,7 +132,6 @@ export function FiltroProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Apaga um filtro salvo
   async function deletarFiltroSalvo(id: string) {
     try {
       const { error } = await supabase.from("filtros_salvos").delete().eq("id", id)
