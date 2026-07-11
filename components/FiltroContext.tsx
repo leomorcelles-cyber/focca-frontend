@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react"
 import { supabase } from "@/lib/supabase"
 
 // Tipo do estado de filtros — compartilhado por todas as paginas
@@ -22,6 +22,17 @@ export const filtroVazio: FiltroState = {
   anos: [], estacoes: [], colecoes: [], cores: [], ids: "", saldoMax: null,
 }
 
+// --- PERIODO GLOBAL (calendario) ---
+// tipo 'dias' = ultimos N dias | tipo 'custom' = intervalo inicio..fim
+export type Periodo = {
+  tipo: "dias" | "custom"
+  dias: number
+  inicio: string   // 'YYYY-MM-DD' (usado quando tipo='custom')
+  fim: string      // 'YYYY-MM-DD'
+}
+
+export const periodoPadrao: Periodo = { tipo: "dias", dias: 30, inicio: "", fim: "" }
+
 export type FiltroSalvo = {
   id: string
   nome: string
@@ -29,23 +40,41 @@ export type FiltroSalvo = {
   criado_em: string
 }
 
-const LS_KEY = "focca_filtro_atual"  // chave da persistencia F5
+const LS_KEY = "focca_filtro_atual"
+const LS_PERIODO = "focca_periodo_atual"
 
-function lerFiltroSalvoLocal(): FiltroState | null {
+function lerFiltroLocal(): FiltroState | null {
   if (typeof window === "undefined") return null
   try {
     const raw = window.localStorage.getItem(LS_KEY)
     if (!raw) return null
-    const obj = JSON.parse(raw)
-    return { ...filtroVazio, ...obj }
-  } catch {
-    return null
+    return { ...filtroVazio, ...JSON.parse(raw) }
+  } catch { return null }
+}
+
+function lerPeriodoLocal(): Periodo | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(LS_PERIODO)
+    if (!raw) return null
+    return { ...periodoPadrao, ...JSON.parse(raw) }
+  } catch { return null }
+}
+
+// Helper: converte o periodo em params de URL para o backend
+// (backend aceita: inicio/fim para custom, dias para ultimos-N)
+export function periodoParaParams(p: Periodo): Record<string, string> {
+  if (p.tipo === "custom" && p.inicio && p.fim) {
+    return { inicio: p.inicio, fim: p.fim }
   }
+  return { dias: String(p.dias) }
 }
 
 type FiltroContextType = {
   filtros: FiltroState
   setFiltros: (f: FiltroState) => void
+  periodo: Periodo
+  setPeriodo: (p: Periodo) => void
   versaoBusca: number
   dispararBusca: () => void
   filtrosSalvos: FiltroSalvo[]
@@ -60,21 +89,28 @@ const FiltroContext = createContext<FiltroContextType | null>(null)
 
 export function FiltroProvider({ children }: { children: ReactNode }) {
   const [filtros, setFiltrosState] = useState<FiltroState>({ ...filtroVazio })
+  const [periodo, setPeriodoState] = useState<Periodo>({ ...periodoPadrao })
   const [versaoBusca, setVersaoBusca] = useState(0)
   const [filtrosSalvos, setFiltrosSalvos] = useState<FiltroSalvo[]>([])
   const [carregandoSalvos, setCarregandoSalvos] = useState(false)
 
-  // --- PERSISTENCIA F5: restaura o filtro do localStorage ao montar ---
+  // PERSISTENCIA F5: restaura filtro e periodo ao montar
   useEffect(() => {
-    const salvo = lerFiltroSalvoLocal()
-    if (salvo) setFiltrosState(salvo)
+    const f = lerFiltroLocal(); if (f) setFiltrosState(f)
+    const p = lerPeriodoLocal(); if (p) setPeriodoState(p)
   }, [])
 
-  // setFiltros que tambem persiste no localStorage
   const setFiltros = useCallback((f: FiltroState) => {
     setFiltrosState(f)
     if (typeof window !== "undefined") {
       try { window.localStorage.setItem(LS_KEY, JSON.stringify(f)) } catch {}
+    }
+  }, [])
+
+  const setPeriodo = useCallback((p: Periodo) => {
+    setPeriodoState(p)
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(LS_PERIODO, JSON.stringify(p)) } catch {}
     }
   }, [])
 
@@ -144,7 +180,7 @@ export function FiltroProvider({ children }: { children: ReactNode }) {
 
   return (
     <FiltroContext.Provider value={{
-      filtros, setFiltros, versaoBusca, dispararBusca,
+      filtros, setFiltros, periodo, setPeriodo, versaoBusca, dispararBusca,
       filtrosSalvos, carregandoSalvos, salvarFiltro, aplicarFiltroSalvo,
       deletarFiltroSalvo, recarregarSalvos,
     }}>

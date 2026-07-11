@@ -2,7 +2,9 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
-import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/FiltroContext"
+
+import SeletorPeriodo from "@/components/SeletorPeriodo"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -20,8 +22,7 @@ const ABAS: { key: Aba, label: string }[] = [
 ]
 
 export default function AnalisePage() {
-  const { filtros, versaoBusca } = useFiltros()
-  const [dias, setDias] = useState(30)
+  const { filtros, versaoBusca, periodo } = useFiltros()
   const [aba, setAba] = useState<Aba>("produtos")
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
@@ -38,7 +39,7 @@ export default function AnalisePage() {
 
   // Monta os query params a partir dos filtros globais (multi-selecao via virgula)
   function montarParams() {
-    const p = new URLSearchParams({ dias: String(dias) })
+    const p = new URLSearchParams(periodoParaParams(periodo))
     if (filtros.lojas.length)   p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)  p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length) p.set("modelo",  filtros.modelos.join(","))
@@ -73,7 +74,7 @@ export default function AnalisePage() {
   }
 
   // Busca ao entrar com filtros, ao mudar dias, ou ao trocar de aba
-  useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, dias, aba])
+  useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, periodo, aba])
 
   const receitaDia = useMemo(() => {
     const map: Record<string, any> = {}
@@ -106,13 +107,7 @@ export default function AnalisePage() {
             Dinâmica por produto, tamanho, coleção, marca e loja — respeitando os filtros globais
           </p>
         </div>
-        <select value={dias} onChange={e => setDias(Number(e.target.value))} style={{ padding: "8px 12px", borderRadius: "8px", fontSize: "13px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)" }}>
-          <option value={7}>Últimos 7 dias</option>
-          <option value={15}>Últimos 15 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-          <option value={60}>Últimos 60 dias</option>
-          <option value={90}>Últimos 90 dias</option>
-        </select>
+        <SeletorPeriodo />
       </div>
 
       <FiltroGlobal onBuscar={buscar} loading={loading} />
@@ -136,7 +131,7 @@ export default function AnalisePage() {
 
       {/* Grafico de receita diaria */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
-        <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px", color: "var(--text)" }}>Receita diária — {dias} dias</h2>
+        <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px", color: "var(--text)" }}>Receita diária — {periodo.tipo === "custom" && periodo.inicio ? periodo.inicio.split("-").reverse().join("/") + " a " + periodo.fim.split("-").reverse().join("/") : "últimos " + periodo.dias + " dias"}</h2>
         {receitaDia.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
             {loading ? "Carregando..." : "Sem vendas no período/recorte selecionado"}

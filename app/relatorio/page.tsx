@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
-import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import { useFiltros, resolverColecoes} from "@/components/FiltroContext"
 import { useSelecao } from "@/components/SelecaoContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
@@ -21,9 +21,9 @@ const SECOES = [
 
 export default function RelatorioPage() {
   const { filtros, versaoBusca } = useFiltros()
+  const [dias, setDias] = useState(30)
   const { itens } = useSelecao()
   const [secoesSel, setSecoesSel] = useState<string[]>(["estoque", "vendas", "topprodutos", "tamanhos"])
-  const [dias, setDias] = useState(30)
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
   const [dados, setDados] = useState<any>(null)
   const [loading, setLoading] = useState(false)
