@@ -5,6 +5,7 @@ import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/FiltroContext"
 
 import SeletorPeriodo from "@/components/SeletorPeriodo"
+import AbaComGrafico from "@/components/AbaComGrafico"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -193,14 +194,53 @@ export default function AnalisePage() {
           <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>Sem dados para este recorte.</div>
         ) : aba === "tamanhos" ? (
           <AbaTamanhos lista={lista} fmtR={fmtR} />
+        ) : aba === "colecoes" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="colecao"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top coleções por receita"
+            colunas={[
+              { key: "colecao", label: "Coleção", bold: true },
+              { key: "produtos", label: "Produtos", tipo: "num", align: "center" },
+              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
+              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
+              { key: "num_vendas", label: "Nº Vendas", tipo: "num", align: "center", cor: "var(--muted)" },
+            ]}
+          />
+        ) : aba === "marcas" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="marca"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top marcas por receita"
+            colunas={[
+              { key: "marca", label: "Marca", bold: true },
+              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
+              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
+              { key: "num_vendas", label: "Nº Vendas", tipo: "num", align: "center", cor: "var(--muted)" },
+            ]}
+          />
+        ) : aba === "modelos" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="modelo"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top modelos por receita"
+            colunas={[
+              { key: "modelo", label: "Modelo", bold: true },
+              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
+              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
+            ]}
+          />
         ) : (
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <thead><tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
                 {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
-                {aba === "colecoes" && ["Coleção","Produtos","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
-                {aba === "marcas" && ["Marca","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
-                {aba === "modelos" && ["Modelo","Qtd Vendida","Receita"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "lojas" && ["Loja","Nº Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
@@ -215,24 +255,6 @@ export default function AnalisePage() {
                       <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
                       <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                       <td style={{ ...td, textAlign: "center" }}>{row.margem_media ?? "-"}%</td>
-                    </>}
-                    {aba === "colecoes" && <>
-                      <td title={row.colecao} style={{ ...td, fontWeight: 600, maxWidth: "280px" }}>{row.colecao}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{row.produtos}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
-                      <td style={{ ...td, textAlign: "center", color: "var(--muted)" }}>{row.num_vendas}</td>
-                    </>}
-                    {aba === "marcas" && <>
-                      <td style={{ ...td, fontWeight: 600 }}>{row.marca}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
-                      <td style={{ ...td, textAlign: "center", color: "var(--muted)" }}>{row.num_vendas}</td>
-                    </>}
-                    {aba === "modelos" && <>
-                      <td style={{ ...td, fontWeight: 600 }}>{row.modelo}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                     </>}
                     {aba === "lojas" && <>
                       <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
