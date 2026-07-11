@@ -11,19 +11,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
 
-type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "lojas"
+type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "modelos" | "lojas"
 
 const ABAS: { key: Aba, label: string }[] = [
   { key: "produtos",   label: "Produtos" },
   { key: "tamanhos",   label: "Tamanhos" },
   { key: "colecoes",   label: "Coleções" },
   { key: "marcas",     label: "Marcas" },
+  { key: "modelos",    label: "Modelos" },
   { key: "lojas",      label: "Lojas" },
 ]
 
 export default function AnalisePage() {
   const { filtros, versaoBusca, periodo } = useFiltros()
   const [aba, setAba] = useState<Aba>("produtos")
+  const [granularidade, setGranularidade] = useState<"dia"|"mes"|"ano">("dia")
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
   const [kpis, setKpis] = useState<any>({})
@@ -77,15 +79,22 @@ export default function AnalisePage() {
   useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, periodo, aba])
 
   const receitaDia = useMemo(() => {
+    // chave de agrupamento conforme granularidade: dia(YYYY-MM-DD), mes(YYYY-MM), ano(YYYY)
+    const chaveDe = (d: string) => {
+      if (!d) return d
+      if (granularidade === "ano") return d.slice(0, 4)
+      if (granularidade === "mes") return d.slice(0, 7)
+      return d
+    }
     const map: Record<string, any> = {}
     receita.forEach(r => {
-      const d = r.data_venda
-      if (!map[d]) map[d] = { data: d, receita: 0, pecas: 0 }
-      map[d].receita += Number(r.receita_bruta || 0)
-      map[d].pecas += Number(r.pecas_vendidas || 0)
+      const k = chaveDe(r.data_venda)
+      if (!map[k]) map[k] = { data: k, receita: 0, pecas: 0 }
+      map[k].receita += Number(r.receita_bruta || 0)
+      map[k].pecas += Number(r.pecas_vendidas || 0)
     })
     return Object.values(map).sort((a: any, b: any) => a.data.localeCompare(b.data))
-  }, [receita])
+  }, [receita, granularidade])
 
   const fmtR = (n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
   const fmtRc = (n: number) => {
@@ -131,7 +140,20 @@ export default function AnalisePage() {
 
       {/* Grafico de receita diaria */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
-        <h2 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "14px", color: "var(--text)" }}>Receita diária — {periodo.tipo === "custom" && periodo.inicio ? periodo.inicio.split("-").reverse().join("/") + " a " + periodo.fim.split("-").reverse().join("/") : "últimos " + periodo.dias + " dias"}</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+        <h2 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>Receita — {periodo.tipo === "custom" && periodo.inicio ? periodo.inicio.split("-").reverse().join("/") + " a " + periodo.fim.split("-").reverse().join("/") : "últimos " + periodo.dias + " dias"}</h2>
+          <div style={{ display: "flex", gap: "4px" }}>
+            {(["dia","mes","ano"] as const).map(g => (
+              <button key={g} onClick={() => setGranularidade(g)} style={{
+                padding: "5px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
+                fontWeight: granularidade === g ? 700 : 500, border: "1px solid",
+                background: granularidade === g ? "var(--primary)" : "var(--surface2)",
+                color: granularidade === g ? "#fff" : "var(--text)",
+                borderColor: granularidade === g ? "var(--primary)" : "var(--border)",
+              }}>{g === "dia" ? "Dia" : g === "mes" ? "Mês" : "Ano"}</button>
+            ))}
+          </div>
+        </div>
         {receitaDia.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
             {loading ? "Carregando..." : "Sem vendas no período/recorte selecionado"}
@@ -140,7 +162,7 @@ export default function AnalisePage() {
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={receitaDia} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="data" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => v.slice(5)} />
+              <XAxis dataKey="data" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => granularidade === "ano" ? v : granularidade === "mes" ? v.slice(2) : v.slice(5)} />
               <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} width={45} />
               <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
                 formatter={(v: any) => [`R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, "Receita"]} />
@@ -178,6 +200,7 @@ export default function AnalisePage() {
                 {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "colecoes" && ["Coleção","Produtos","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "marcas" && ["Marca","Qtd Vendida","Receita","Nº Vendas"].map(h => <th key={h} style={th}>{h}</th>)}
+                {aba === "modelos" && ["Modelo","Qtd Vendida","Receita"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "lojas" && ["Loja","Nº Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
@@ -205,6 +228,11 @@ export default function AnalisePage() {
                       <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
                       <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                       <td style={{ ...td, textAlign: "center", color: "var(--muted)" }}>{row.num_vendas}</td>
+                    </>}
+                    {aba === "modelos" && <>
+                      <td style={{ ...td, fontWeight: 600 }}>{row.modelo}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
+                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                     </>}
                     {aba === "lojas" && <>
                       <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
