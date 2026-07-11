@@ -277,11 +277,7 @@ export default function AnalisePage() {
 // Aba de tamanhos com grafico de barras (curva de grade)
 function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => string }) {
   const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3","34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
-  const ordenada = [...lista].sort((a, b) => {
-    const ia = ORDEM_TAM.indexOf(a.tamanho), ib = ORDEM_TAM.indexOf(b.tamanho)
-    if (ia === -1 && ib === -1) return String(a.tamanho).localeCompare(String(b.tamanho))
-    if (ia === -1) return 1; if (ib === -1) return -1; return ia - ib
-  })
+  const ordenada = [...lista].sort((a, b) => Number(b.qtd_vendida || 0) - Number(a.qtd_vendida || 0))
   const maxQtd = Math.max(...ordenada.map(t => Number(t.qtd_vendida) || 0), 1)
 
   return (
