@@ -6,6 +6,7 @@ import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/Fil
 
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import AbaComGrafico from "@/components/AbaComGrafico"
+import ModalEstoque from "@/components/ModalEstoque"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -27,6 +28,7 @@ export default function AnalisePage() {
   const { filtros, versaoBusca, periodo } = useFiltros()
   const [aba, setAba] = useState<Aba>("produtos")
   const [granularidade, setGranularidade] = useState<"dia"|"mes"|"ano">("dia")
+  const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, titulo?:string}>({aberto:false})
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
   const [kpis, setKpis] = useState<any>({})
@@ -230,17 +232,21 @@ export default function AnalisePage() {
             campoValor="receita"
             fmtR={fmtR}
             tituloGrafico="Top modelos por receita"
+            onClicar={(row: any, c: any) => {
+              if (c.key === "estoque_rede") setModalEstoque({ aberto: true, modelo: row.modelo, titulo: row.modelo })
+            }}
             colunas={[
               { key: "modelo", label: "Modelo", bold: true },
               { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
               { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
+              { key: "estoque_rede", label: "Estoque", tipo: "num", align: "right", bold: true, clicavel: true },
             ]}
           />
         ) : (
           <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <thead><tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
-                {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
+                {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem","Estoque"].map(h => <th key={h} style={th}>{h}</th>)}
                 {aba === "lojas" && ["Loja","Nº Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
@@ -255,6 +261,15 @@ export default function AnalisePage() {
                       <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
                       <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
                       <td style={{ ...td, textAlign: "center" }}>{row.margem_media ?? "-"}%</td>
+                      <td
+                        onClick={() => setModalEstoque({ aberto: true, cod: Number(row.cod_produto), titulo: row.produto })}
+                        title="Ver estoque por loja"
+                        style={{
+                          ...td, textAlign: "right", fontWeight: 700, cursor: "pointer",
+                          color: Number(row.estoque_rede) === 0 ? "var(--danger)" : "var(--text)",
+                          textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: "3px",
+                        }}
+                      >{Number(row.estoque_rede ?? 0).toLocaleString("pt-BR")}</td>
                     </>}
                     {aba === "lojas" && <>
                       <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
@@ -270,6 +285,14 @@ export default function AnalisePage() {
           </div>
         )}
       </div>
+
+      <ModalEstoque
+        aberto={modalEstoque.aberto}
+        onFechar={() => setModalEstoque({ aberto: false })}
+        codProduto={modalEstoque.cod}
+        modelo={modalEstoque.modelo}
+        titulo={modalEstoque.titulo}
+      />
     </div>
   )
 }

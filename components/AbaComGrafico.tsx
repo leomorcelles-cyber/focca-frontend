@@ -11,6 +11,7 @@ type Coluna = {
   align?: "left" | "right" | "center"
   bold?: boolean
   cor?: string
+  clicavel?: boolean   // celula vira botao (ex: estoque -> abre o detalhe por loja)
 }
 
 type Props = {
@@ -21,12 +22,13 @@ type Props = {
   fmtR: (n: number) => string
   tituloGrafico?: string
   corBarra?: string
+  onClicar?: (row: any, coluna: Coluna) => void
 }
 
 const BRL = (n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 const NUM = (n: number) => Number(n || 0).toLocaleString("pt-BR")
 
-export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGrafico, corBarra = "var(--primary)" }: Props) {
+export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGrafico, corBarra = "var(--primary)", onClicar }: Props) {
   // ordena decrescente pelo campo do grafico (maior no topo)
   const ordenada = [...lista].sort((a, b) => Number(b[campoValor] || 0) - Number(a[campoValor] || 0))
   // top 12 pro grafico (senao fica ilegivel); a tabela mostra tudo
@@ -89,7 +91,18 @@ export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, 
                     ...td, textAlign: c.align || "left",
                     fontWeight: c.bold ? 700 : 400,
                     color: c.cor || "var(--text)",
-                  }}>{fmtCel(row, c)}</td>
+                  }}>
+                    {c.clicavel && onClicar ? (
+                      <span
+                        onClick={() => onClicar(row, c)}
+                        title="Ver estoque por loja"
+                        style={{
+                          cursor: "pointer", textDecoration: "underline",
+                          textDecorationStyle: "dotted", textUnderlineOffset: "3px",
+                        }}
+                      >{fmtCel(row, c)}</span>
+                    ) : fmtCel(row, c)}
+                  </td>
                 ))}
               </tr>
             ))}
