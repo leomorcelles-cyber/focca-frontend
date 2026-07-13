@@ -3,6 +3,7 @@ import { useState, useMemo, useRef, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros } from "@/components/FiltroContext"
+import BotoesExport from "@/components/BotoesExport"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -90,6 +91,76 @@ export default function TransferenciasPage() {
     overscan: 12,
   })
 
+  // Cabecalho do export: descreve o recorte aplicado
+  const descricaoFiltros = useMemo(() => {
+    const partes: string[] = []
+    if (filtros.lojas.length)    partes.push(`Lojas destino: ${filtros.lojas.length} selec.`)
+    if (filtros.marcas.length)   partes.push(`Marca: ${filtros.marcas.join(", ")}`)
+    if (filtros.colecoes.length) partes.push(`Colecao: ${filtros.colecoes.join(", ")}`)
+    if (filtros.modelos.length)  partes.push(`Modelo: ${filtros.modelos.join(", ")}`)
+    if (filtros.cores.length)    partes.push(`Cor: ${filtros.cores.join(", ")}`)
+    if (urgencia.length)         partes.push(`Urgencia: ${urgencia.join(", ")}`)
+    if (classes.length)          partes.push(`Giro: ${classes.join(", ")}`)
+    partes.push(`Ordenado por: ${ORDENS.find(o => o.key === ordenar)?.label || ordenar}`)
+    return partes.join(" | ")
+  }, [filtros, urgencia, classes, ordenar])
+
+  async function exportarDados(formato: "csv" | "xlsx") {
+    if (!dados.length) { alert("Nada para exportar ainda."); return }
+    const secoes: any[] = []
+
+    secoes.push({
+      titulo: "Resumo",
+      colunas: ["Metrica", "Valor"],
+      linhas: [
+        ["Sugestoes de transferencia", dados.length],
+        ["Pecas a mover", n0(totalPecas)],
+        ["Vindas do CD", n0(doCD)],
+        ["Entre lojas", n0(totalPecas - doCD)],
+        ["Perda semanal evitada", brl(perdaEvitada)],
+      ],
+    })
+
+    // A lista vira uma ORDEM DE SEPARACAO: quem executa entende o porque.
+    secoes.push({
+      titulo: "Transferencias Sugeridas",
+      colunas: ["Cod", "Produto", "Cor", "Tam", "Marca", "De", "Para",
+                "Qtd", "Urgencia", "Giro destino (dia)", "Classe", "Dias restantes", "Motivo"],
+      linhas: dados.map((r: any) => [
+        r.cod_produto,
+        r.produto,
+        r.cor,
+        r.tamanho,
+        r.marca,
+        r.de_eh_cd ? "CD" : limpaNome(r.de_loja),
+        limpaNome(r.para_loja),
+        n0(r.quantidade),
+        r.urgencia,
+        n2(r.para_giro),
+        r.classe_giro,
+        n0(r.para_dias_restantes),
+        r.motivo,
+      ]),
+    })
+
+    const body = { titulo: "Transferencias Sugeridas", formato, filtros: descricaoFiltros, secoes }
+    try {
+      const res = await fetch(`${API_URL}/export/inteligente`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) { alert("Falha ao gerar o arquivo."); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Transferencias_${new Date().toISOString().slice(0, 10)}.${formato}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { alert("Erro de rede ao exportar.") }
+  }
+
   const th = (align: string) => ({
     padding: "9px 12px", textAlign: align as any, color: "var(--muted)" as const,
     fontWeight: 600 as const, fontSize: "10px" as const, textTransform: "uppercase" as const,
@@ -99,21 +170,24 @@ export default function TransferenciasPage() {
   const cols = "170px 80px 45px 90px 1fr 70px 1fr"
 
   return (
-    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ marginBottom: "20px" }}>
-        <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>
-          Transferências Sugeridas
-        </h1>
-        <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
-          Só sugere destino que <strong>vende</strong> o produto (giro dos últimos 90 dias) e está prestes a romper.
-          Tira do CD primeiro, depois de quem tem estoque parado.
-        </p>
+    <div id="area-export" style={{ maxWidth: "100%", overflow: "hidden" }}>
+      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>
+            Transferências Sugeridas
+          </h1>
+          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
+            Só sugere destino que <strong>vende</strong> o produto (giro dos últimos 90 dias) e está prestes a romper.
+            Tira do CD primeiro, depois de quem tem estoque parado.
+          </p>
+        </div>
+        <BotoesExport areaId="area-export" titulo="Transferências Sugeridas" onExportarDados={exportarDados} />
       </div>
 
-      <FiltroGlobal onBuscar={buscar} loading={loading} />
+      <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} /></div>
 
       {/* Filtro de urgencia */}
-      <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
+      <div data-no-export style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
           Urgência:
         </span>
@@ -140,7 +214,7 @@ export default function TransferenciasPage() {
       </div>
 
       {/* Classe de giro + ordenacao */}
-      <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
+      <div data-no-export style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
           Giro no destino:
         </span>
