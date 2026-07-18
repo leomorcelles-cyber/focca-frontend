@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useRef } from "react"
 import BotoesExport from "@/components/BotoesExport"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -328,31 +329,23 @@ export default function Home() {
             <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
               <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>Resumo por Loja</h2>
             </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                <thead>
-                  <tr style={{ background: "var(--surface2)", borderBottom: "1px solid var(--border)" }}>
-                    {["Loja","SKUs","Peças","Valor Estoque","Margem"].map(h => (
-                      <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: "var(--muted)", fontWeight: 600, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.4px", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lojas.map((l: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.nome_loja}</div>
-                        {l.cidade && !String(l.nome_loja).includes("CENTRO DE DISTRIBUI") && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>}
-                      </td>
-                      <td style={{ padding: "12px 14px" }}>{fmt(l.total_skus)}</td>
-                      <td style={{ padding: "12px 14px" }}>{fmt(l.total_pecas)}</td>
-                      <td style={{ padding: "12px 14px", color: "var(--primary)", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtR(l.valor_venda_potencial ?? l.valor_estoque)}</td>
-                      <td style={{ padding: "12px 14px", color: Number(l.margem_media_pct) > 0 ? "var(--success)" : "var(--danger)", fontWeight: 500 }}>{l.margem_media_pct}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TabelaOrdenavel
+              linhas={lojas}
+              initialKey="valor_estoque"
+              zebra={false}
+              colunas={[
+                { key: "nome_loja", label: "Loja", render: (l: any) => (
+                  <>
+                    <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.nome_loja}</div>
+                    {l.cidade && !String(l.nome_loja).includes("CENTRO DE DISTRIBUI") && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>}
+                  </>
+                ) },
+                { key: "total_skus", label: "SKUs", sortBy: (l: any) => Number(l.total_skus) || 0, render: (l: any) => fmt(l.total_skus) },
+                { key: "total_pecas", label: "Peças", sortBy: (l: any) => Number(l.total_pecas) || 0, render: (l: any) => fmt(l.total_pecas) },
+                { key: "valor_estoque", label: "Valor Estoque", sortBy: (l: any) => Number(l.valor_venda_potencial ?? l.valor_estoque) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (l: any) => fmtR(l.valor_venda_potencial ?? l.valor_estoque) },
+                { key: "margem_media_pct", label: "Margem", sortBy: (l: any) => Number(l.margem_media_pct) || 0, render: (l: any) => <span style={{ fontWeight: 500, color: Number(l.margem_media_pct) > 0 ? "var(--success)" : "var(--danger)" }}>{l.margem_media_pct}%</span> },
+              ]}
+            />
           </div>
         </>
       )}

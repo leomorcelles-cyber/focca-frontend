@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes} from "@/components/FiltroContext"
 import { useSelecao } from "@/components/SelecaoContext"
+import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -352,44 +353,34 @@ export default function RelatorioPage() {
             {secoesSel.includes("topprodutos") && s.topprodutos?.length > 0 && (
               <div style={card}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Top Produtos</h2>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr>{["Produto","Cor","Marca","Coleção","Qtd","Receita"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                      {s.topprodutos.map((p: any, i: number) => (
-                        <tr key={i}>
-                          <td style={{ ...td, fontWeight: 600 }}>{p.produto}</td>
-                          <td style={{ ...td, color: "var(--muted)" }}>{p.cor}</td>
-                          <td style={td}>{p.marca}</td>
-                          <td style={{ ...td, color: "var(--muted)", fontSize: "11px" }}>{p.colecao}</td>
-                          <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{fmtN(p.qtd)}</td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(p.receita)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <TabelaOrdenavel
+                  linhas={s.topprodutos}
+                  initialKey="receita"
+                  colunas={[
+                    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600 } },
+                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+                    { key: "marca", label: "Marca" },
+                    { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", fontSize: "11px" } },
+                    { key: "qtd", label: "Qtd", align: "right", sortBy: (p: any) => Number(p.qtd) || 0, tdStyle: { fontWeight: 700 }, render: (p: any) => fmtN(p.qtd) },
+                    { key: "receita", label: "Receita", align: "right", sortBy: (p: any) => Number(p.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (p: any) => fmtR(p.receita) },
+                  ]}
+                />
               </div>
             )}
 
             {secoesSel.includes("topmarcas") && s.topmarcas?.length > 0 && (
               <div style={card}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Top Marcas</h2>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr>{["Marca","Qtd","Receita","Vendas"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                      {s.topmarcas.map((m: any, i: number) => (
-                        <tr key={i}>
-                          <td style={{ ...td, fontWeight: 600 }}>{m.marca}</td>
-                          <td style={{ ...td, textAlign: "right" }}>{fmtN(m.qtd)}</td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(m.receita)}</td>
-                          <td style={{ ...td, textAlign: "center", color: "var(--muted)" }}>{m.vendas}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <TabelaOrdenavel
+                  linhas={s.topmarcas}
+                  initialKey="receita"
+                  colunas={[
+                    { key: "marca", label: "Marca", tdStyle: { fontWeight: 600 } },
+                    { key: "qtd", label: "Qtd", align: "right", sortBy: (m: any) => Number(m.qtd) || 0, render: (m: any) => fmtN(m.qtd) },
+                    { key: "receita", label: "Receita", align: "right", sortBy: (m: any) => Number(m.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (m: any) => fmtR(m.receita) },
+                    { key: "vendas", label: "Vendas", align: "center", sortBy: (m: any) => Number(m.vendas) || 0, tdStyle: { color: "var(--muted)" } },
+                  ]}
+                />
               </div>
             )}
 
@@ -410,22 +401,17 @@ export default function RelatorioPage() {
             {secoesSel.includes("lojas") && s.lojas?.length > 0 && (
               <div style={card}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Vendas por Loja</h2>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr>{["Loja","Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                      {s.lojas.map((v: any, i: number) => (
-                        <tr key={i}>
-                          <td style={{ ...td, fontWeight: 600 }}>{v.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
-                          <td style={{ ...td, textAlign: "center" }}>{v.num_vendas}</td>
-                          <td style={{ ...td, textAlign: "center" }}>{Number(v.pecas || 0)}</td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(v.receita)}</td>
-                          <td style={{ ...td, textAlign: "right", color: Number(v.margem_media) >= 0 ? "var(--success, #16a34a)" : "var(--danger)" }}>{Number(v.margem_media || 0).toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <TabelaOrdenavel
+                  linhas={s.lojas}
+                  initialKey="receita"
+                  colunas={[
+                    { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (v: any) => v.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
+                    { key: "num_vendas", label: "Vendas", align: "center", sortBy: (v: any) => Number(v.num_vendas) || 0 },
+                    { key: "pecas", label: "Peças", align: "center", sortBy: (v: any) => Number(v.pecas) || 0, render: (v: any) => Number(v.pecas || 0) },
+                    { key: "receita", label: "Receita", align: "right", sortBy: (v: any) => Number(v.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (v: any) => fmtR(v.receita) },
+                    { key: "margem_media", label: "Margem", align: "right", sortBy: (v: any) => Number(v.margem_media) || 0, render: (v: any) => <span style={{ color: Number(v.margem_media) >= 0 ? "var(--success, #16a34a)" : "var(--danger)" }}>{Number(v.margem_media || 0).toFixed(1)}%</span> },
+                  ]}
+                />
               </div>
             )}
 

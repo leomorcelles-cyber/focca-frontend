@@ -1,5 +1,6 @@
 "use client"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
+import { useSort, seta } from "@/lib/useSort"
 
 // Componente reutilizavel: grafico de barras (top N por receita) + tabela ordenada.
 // Usado nas abas marcas, modelos, colecoes da Analise de Vendas.
@@ -29,8 +30,10 @@ const BRL = (n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimu
 const NUM = (n: number) => Number(n || 0).toLocaleString("pt-BR")
 
 export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGrafico, corBarra = "var(--primary)", onClicar }: Props) {
-  // ordena decrescente pelo campo do grafico (maior no topo)
+  // ordena decrescente pelo campo do grafico (maior no topo) -- so pro grafico
   const ordenada = [...lista].sort((a, b) => Number(b[campoValor] || 0) - Number(a[campoValor] || 0))
+  // tabela: ordenacao por clique no cabecalho (default: campo do grafico, desc)
+  const { sorted, sortKey, sortDir, toggle } = useSort(lista, campoValor, "desc")
   // top 12 pro grafico (senao fica ilegivel); a tabela mostra tudo
   const topGrafico = ordenada.slice(0, 12).map(r => ({
     nome: String(r[campoLabel] || "—"),
@@ -79,12 +82,16 @@ export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, 
           <thead>
             <tr style={{ background: "var(--surface2)" }}>
               {colunas.map(c => (
-                <th key={c.key} style={{ ...th, textAlign: c.align || "left" }}>{c.label}</th>
+                <th key={c.key} onClick={() => toggle(c.key)} title="Clique para ordenar"
+                  style={{ ...th, textAlign: c.align || "left", cursor: "pointer", userSelect: "none",
+                           color: sortKey === c.key ? "var(--text)" : "var(--muted)" }}>
+                  {c.label}{seta(sortKey === c.key, sortDir)}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {ordenada.map((row, i) => (
+            {sorted.map((row, i) => (
               <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                 {colunas.map(c => (
                   <td key={c.key} style={{

@@ -3,8 +3,22 @@ import { useState, useRef, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal from "@/components/FiltroGlobal"
 import { useFiltros } from "@/components/FiltroContext"
+import { useSort, seta } from "@/lib/useSort"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+
+const COLS_MARGEM: { key: string; label: string; align: "left" | "center" | "right" }[] = [
+  { key: "nome",             label: "Produto",    align: "left" },
+  { key: "cor",              label: "Cor",        align: "left" },
+  { key: "tamanho",          label: "Tam",        align: "left" },
+  { key: "marca",            label: "Marca",      align: "left" },
+  { key: "saldo_atual",      label: "Saldo",      align: "center" },
+  { key: "preco_venda",      label: "Preço",      align: "right" },
+  { key: "preco_custo",      label: "Custo",      align: "right" },
+  { key: "margem_bruta_pct", label: "Margem",     align: "center" },
+  { key: "markup",           label: "Markup",     align: "center" },
+  { key: "lucro_potencial",  label: "Lucro pot.", align: "right" },
+]
 
 function corMargem(m: number) {
   if (m >= 60) return { cor: "var(--success)", bg: "var(--success-light)" }
@@ -58,8 +72,10 @@ export default function MargemPage() {
   const margemMedia = dados.filter(r => r.margem_bruta_pct).length > 0
     ? dados.reduce((a, r) => a + (r.margem_bruta_pct || 0), 0) / dados.filter(r => r.margem_bruta_pct).length : 0
 
+  const { sorted, sortKey, sortDir, toggle } = useSort(dados)
+
   const virtualizer = useVirtualizer({
-    count: dados.length,
+    count: sorted.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 40,
     overscan: 12,
@@ -117,16 +133,22 @@ export default function MargemPage() {
           <div style={{ overflowX: "auto" }}>
             <div style={{ minWidth: "1000px" }}>
               <div style={{ display: "grid", gridTemplateColumns: cols, background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
-                {["Produto","Cor","Tam","Marca","Saldo","Preço","Custo","Margem","Markup","Lucro pot."].map(h => <div key={h} style={th}>{h}</div>)}
+                {COLS_MARGEM.map(c => (
+                  <div key={c.key} onClick={() => toggle(c.key)} title="Clique para ordenar"
+                    style={{ ...th, textAlign: c.align, cursor: "pointer", userSelect: "none",
+                             color: sortKey === c.key ? "var(--text)" : "var(--muted)" }}>
+                    {c.label}{seta(sortKey === c.key, sortDir)}
+                  </div>
+                ))}
               </div>
               <div ref={scrollRef} style={{ height: "calc(100vh - 400px)", overflowY: "auto" }}>
                 <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}>
                   {virtualizer.getVirtualItems().map(vr => {
-                    const row = dados[vr.index]
+                    const row = sorted[vr.index]
                     const mc = corMargem(row.margem_bruta_pct || 0)
                     return (
                       <div key={vr.key} data-index={vr.index} ref={virtualizer.measureElement}
-                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)`, display: "grid", gridTemplateColumns: cols, borderBottom: "1px solid var(--border)", background: vr.index % 2 === 0 ? "transparent" : "var(--surface2)18", fontSize: "12px", alignItems: "center" }}>
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${vr.start}px)`, display: "grid", gridTemplateColumns: cols, borderBottom: "1px solid var(--border)", background: vr.index % 2 === 0 ? "transparent" : "color-mix(in srgb, var(--surface2) 45%, transparent)", fontSize: "12px", alignItems: "center" }}>
                         <div title={row.nome} style={{ padding: "8px 12px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.nome}</div>
                         <div style={{ padding: "8px 12px", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.cor}</div>
                         <div style={{ padding: "8px 12px", fontWeight: 700 }}>{row.tamanho}</div>

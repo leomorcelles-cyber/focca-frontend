@@ -7,6 +7,7 @@ import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/Fil
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import AbaComGrafico from "@/components/AbaComGrafico"
 import ModalEstoque from "@/components/ModalEstoque"
+import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -106,9 +107,6 @@ export default function AnalisePage() {
     if (n >= 1_000) return `R$ ${(n/1_000).toFixed(0)}k`
     return `R$ ${n.toFixed(0)}`
   }
-
-  const th = { padding: "9px 12px", textAlign: "left" as const, color: "var(--muted)" as const, fontWeight: 600 as const, fontSize: "10px" as const, textTransform: "uppercase" as const, letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const }
-  const td = { padding: "9px 12px", overflow: "hidden" as const, textOverflow: "ellipsis" as const, whiteSpace: "nowrap" as const }
 
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
@@ -242,47 +240,39 @@ export default function AnalisePage() {
               { key: "estoque_rede", label: "Estoque", tipo: "num", align: "right", bold: true, clicavel: true },
             ]}
           />
+        ) : aba === "produtos" ? (
+          <TabelaOrdenavel
+            linhas={lista}
+            initialKey="qtd_vendida"
+            colunas={[
+              { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis" }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
+              { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+              { key: "modelo", label: "Modelo" },
+              { key: "marca", label: "Marca" },
+              { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis" }, render: (r: any) => <span title={r.colecao}>{r.colecao}</span> },
+              { key: "qtd_vendida", label: "Qtd", align: "right", sortBy: (r: any) => Number(r.qtd_vendida) || 0, tdStyle: { fontWeight: 700 }, render: (r: any) => Number(r.qtd_vendida).toLocaleString("pt-BR") },
+              { key: "receita", label: "Receita", align: "right", sortBy: (r: any) => Number(r.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita) },
+              { key: "margem_media", label: "Margem", align: "center", sortBy: (r: any) => Number(r.margem_media) || 0, render: (r: any) => `${r.margem_media ?? "-"}%` },
+              { key: "estoque_rede", label: "Estoque", align: "right", sortBy: (r: any) => Number(r.estoque_rede) || 0, render: (r: any) => (
+                <span onClick={() => setModalEstoque({ aberto: true, cod: Number(r.cod_produto), titulo: r.produto })} title="Ver estoque por loja"
+                  style={{ cursor: "pointer", fontWeight: 700, textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: "3px", color: Number(r.estoque_rede) === 0 ? "var(--danger)" : "var(--text)" }}>
+                  {Number(r.estoque_rede ?? 0).toLocaleString("pt-BR")}
+                </span>
+              ) },
+            ]}
+          />
         ) : (
-          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-              <thead><tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
-                {aba === "produtos" && ["Produto","Cor","Modelo","Marca","Coleção","Qtd","Receita","Margem","Estoque"].map(h => <th key={h} style={th}>{h}</th>)}
-                {aba === "lojas" && ["Loja","Nº Vendas","Peças","Receita","Margem"].map(h => <th key={h} style={th}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {lista.map((row, i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "var(--surface2)18" }}>
-                    {aba === "produtos" && <>
-                      <td title={row.produto} style={{ ...td, fontWeight: 600, maxWidth: "220px" }}>{row.produto}</td>
-                      <td style={{ ...td, color: "var(--muted)" }}>{row.cor}</td>
-                      <td style={td}>{row.modelo}</td>
-                      <td style={td}>{row.marca}</td>
-                      <td title={row.colecao} style={{ ...td, color: "var(--muted)", maxWidth: "140px" }}>{row.colecao}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{Number(row.qtd_vendida).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita)}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{row.margem_media ?? "-"}%</td>
-                      <td
-                        onClick={() => setModalEstoque({ aberto: true, cod: Number(row.cod_produto), titulo: row.produto })}
-                        title="Ver estoque por loja"
-                        style={{
-                          ...td, textAlign: "right", fontWeight: 700, cursor: "pointer",
-                          color: Number(row.estoque_rede) === 0 ? "var(--danger)" : "var(--text)",
-                          textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: "3px",
-                        }}
-                      >{Number(row.estoque_rede ?? 0).toLocaleString("pt-BR")}</td>
-                    </>}
-                    {aba === "lojas" && <>
-                      <td style={{ ...td, fontWeight: 600 }}>{row.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{row.num_vendas}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{Number(row.pecas_vendidas || 0).toLocaleString("pt-BR")}</td>
-                      <td style={{ ...td, textAlign: "right", color: "var(--primary)", fontWeight: 600 }}>{fmtR(row.receita_total)}</td>
-                      <td style={{ ...td, textAlign: "right", color: Number(row.margem_media) >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>{Number(row.margem_media || 0).toFixed(1)}%</td>
-                    </>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaOrdenavel
+            linhas={lista}
+            initialKey="receita_total"
+            colunas={[
+              { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (r: any) => r.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
+              { key: "num_vendas", label: "Nº Vendas", align: "center" },
+              { key: "pecas_vendidas", label: "Peças", align: "center", sortBy: (r: any) => Number(r.pecas_vendidas) || 0, render: (r: any) => Number(r.pecas_vendidas || 0).toLocaleString("pt-BR") },
+              { key: "receita_total", label: "Receita", align: "right", sortBy: (r: any) => Number(r.receita_total) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita_total) },
+              { key: "margem_media", label: "Margem", align: "right", sortBy: (r: any) => Number(r.margem_media) || 0, tdStyle: { fontWeight: 600 }, render: (r: any) => <span style={{ color: Number(r.margem_media) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(r.margem_media || 0).toFixed(1)}%</span> },
+            ]}
+          />
         )}
       </div>
 
