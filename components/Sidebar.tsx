@@ -11,6 +11,7 @@ const nav = [
   { href: "/analise",        label: "Analise de Vendas",icon: "↗" },
   { href: "/margem",         label: "Margem",           icon: "%" },
   { href: "/relatorio",      label: "Relatorio",        icon: "▤" },
+  { href: "/chat",           label: "Chat IA",          icon: "✦" },
 ]
 
 export default function Sidebar() {
