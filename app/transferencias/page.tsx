@@ -306,7 +306,7 @@ export default function TransferenciasPage() {
                           position: "absolute", top: 0, left: 0, width: "100%",
                           transform: `translateY(${vr.start}px)`, display: "grid",
                           gridTemplateColumns: cols, borderBottom: "1px solid var(--border)",
-                          background: vr.index % 2 === 0 ? "transparent" : "var(--surface2)18",
+                          background: vr.index % 2 === 0 ? "transparent" : "color-mix(in srgb, var(--surface2) 45%, transparent)",
                           fontSize: "12px", alignItems: "center",
                         }}>
                         <div title={row.produto} style={{ padding: "8px 12px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.produto}</div>
