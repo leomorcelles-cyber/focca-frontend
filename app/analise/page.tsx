@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/FiltroContext"
@@ -15,6 +15,24 @@ const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
 
 type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "modelos" | "lojas"
+
+// Grafico de receita memoizado: o recharts e caro de re-renderizar, e antes
+// re-renderizava a cada clique em QUALQUER filtro global (o Context re-renderiza
+// a pagina inteira). Agora so re-renderiza quando os dados/granularidade mudam.
+const GraficoReceita = memo(function GraficoReceita({ dados, granularidade }: { dados: any[], granularidade: "dia" | "mes" | "ano" }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="data" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => granularidade === "ano" ? v : granularidade === "mes" ? v.slice(2) : v.slice(5)} />
+        <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} width={45} />
+        <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
+          formatter={(v: any) => [`R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, "Receita"]} />
+        <Line type="monotone" dataKey="receita" stroke="var(--primary)" strokeWidth={2} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+})
 
 const ABAS: { key: Aba, label: string }[] = [
   { key: "produtos",   label: "Produtos" },
@@ -64,8 +82,9 @@ export default function AnalisePage() {
 
   async function buscar() {
     if (abortRef.current) abortRef.current.abort()
-    abortRef.current = new AbortController()
-    const sig = abortRef.current.signal
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    const sig = ctrl.signal
     setLoading(true); setBuscaFeita(true)
     const p = montarParams()
     try {
@@ -76,7 +95,11 @@ export default function AnalisePage() {
       ])
       setKpis(k || {}); setReceita(Array.isArray(r) ? r : []); setLista(Array.isArray(l) ? l : [])
     } catch(e: any) { if (e?.name !== "AbortError") console.error(e) }
-    finally { setLoading(false) }
+    finally {
+      // so desliga o loading se ESTA busca ainda for a atual — uma busca abortada
+      // por outra mais nova nao pode apagar o "Buscando..." da que esta em voo
+      if (abortRef.current === ctrl) setLoading(false)
+    }
   }
 
   // Busca ao entrar com filtros, ao mudar dias, ou ao trocar de aba
@@ -100,13 +123,68 @@ export default function AnalisePage() {
     return Object.values(map).sort((a: any, b: any) => a.data.localeCompare(b.data))
   }, [receita, granularidade])
 
-  const fmtR = (n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-  const fmtRc = (n: number) => {
+  // useCallback: referencias estaveis para os componentes memoizados (AbaComGrafico,
+  // TabelaOrdenavel) nao re-renderizarem a toa quando a pagina re-renderiza.
+  const fmtR = useCallback((n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, [])
+  const fmtRc = useCallback((n: number) => {
     n = Number(n || 0)
     if (n >= 1_000_000) return `R$ ${(n/1_000_000).toFixed(1)}M`
     if (n >= 1_000) return `R$ ${(n/1_000).toFixed(0)}k`
     return `R$ ${n.toFixed(0)}`
-  }
+  }, [])
+
+  const onClicarModelo = useCallback((row: any, c: any) => {
+    if (c.key === "estoque_rede") setModalEstoque({ aberto: true, modelo: row.modelo, titulo: row.modelo })
+  }, [])
+
+  // Colunas estaveis (useMemo) — sem isso, cada render cria arrays novos e o memo
+  // dos componentes de tabela/grafico nunca "pega".
+  const colsColecoes = useMemo(() => [
+    { key: "colecao", label: "Coleção", bold: true },
+    { key: "produtos", label: "Produtos", tipo: "num" as const, align: "center" as const },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+  ], [])
+
+  const colsMarcas = useMemo(() => [
+    { key: "marca", label: "Marca", bold: true },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+  ], [])
+
+  const colsModelos = useMemo(() => [
+    { key: "modelo", label: "Modelo", bold: true },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
+  ], [])
+
+  const colsProdutos = useMemo(() => [
+    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
+    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+    { key: "modelo", label: "Modelo" },
+    { key: "marca", label: "Marca" },
+    { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", maxWidth: "140px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.colecao}>{r.colecao}</span> },
+    { key: "qtd_vendida", label: "Qtd", align: "right" as const, sortBy: (r: any) => Number(r.qtd_vendida) || 0, tdStyle: { fontWeight: 700 }, render: (r: any) => Number(r.qtd_vendida).toLocaleString("pt-BR") },
+    { key: "receita", label: "Receita", align: "right" as const, sortBy: (r: any) => Number(r.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita) },
+    { key: "margem_media", label: "Margem", align: "center" as const, sortBy: (r: any) => Number(r.margem_media) || 0, render: (r: any) => `${r.margem_media ?? "-"}%` },
+    { key: "estoque_rede", label: "Estoque", align: "right" as const, sortBy: (r: any) => Number(r.estoque_rede) || 0, render: (r: any) => (
+      <span onClick={() => setModalEstoque({ aberto: true, cod: Number(r.cod_produto), titulo: r.produto })} title="Ver estoque por loja"
+        style={{ cursor: "pointer", fontWeight: 700, textDecoration: "underline", textDecorationStyle: "dotted" as const, textUnderlineOffset: "3px", color: Number(r.estoque_rede) === 0 ? "var(--danger)" : "var(--text)" }}>
+        {Number(r.estoque_rede ?? 0).toLocaleString("pt-BR")}
+      </span>
+    ) },
+  ], [fmtR])
+
+  const colsLojas = useMemo(() => [
+    { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (r: any) => r.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
+    { key: "num_vendas", label: "Nº Vendas", align: "center" as const },
+    { key: "pecas_vendidas", label: "Peças", align: "center" as const, sortBy: (r: any) => Number(r.pecas_vendidas) || 0, render: (r: any) => Number(r.pecas_vendidas || 0).toLocaleString("pt-BR") },
+    { key: "receita_total", label: "Receita", align: "right" as const, sortBy: (r: any) => Number(r.receita_total) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita_total) },
+    { key: "margem_media", label: "Margem", align: "right" as const, sortBy: (r: any) => Number(r.margem_media) || 0, tdStyle: { fontWeight: 600 }, render: (r: any) => <span style={{ color: Number(r.margem_media) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(r.margem_media || 0).toFixed(1)}%</span> },
+  ], [fmtR])
 
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
@@ -160,16 +238,7 @@ export default function AnalisePage() {
             {loading ? "Carregando..." : "Sem vendas no período/recorte selecionado"}
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={receitaDia} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="data" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => granularidade === "ano" ? v : granularidade === "mes" ? v.slice(2) : v.slice(5)} />
-              <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} width={45} />
-              <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
-                formatter={(v: any) => [`R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, "Receita"]} />
-              <Line type="monotone" dataKey="receita" stroke="var(--primary)" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          <GraficoReceita dados={receitaDia} granularidade={granularidade} />
         )}
       </div>
 
@@ -201,13 +270,7 @@ export default function AnalisePage() {
             campoValor="receita"
             fmtR={fmtR}
             tituloGrafico="Top coleções por receita"
-            colunas={[
-              { key: "colecao", label: "Coleção", bold: true },
-              { key: "produtos", label: "Produtos", tipo: "num", align: "center" },
-              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
-              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
-              { key: "num_vendas", label: "Nº Vendas", tipo: "num", align: "center", cor: "var(--muted)" },
-            ]}
+            colunas={colsColecoes}
           />
         ) : aba === "marcas" ? (
           <AbaComGrafico
@@ -216,12 +279,7 @@ export default function AnalisePage() {
             campoValor="receita"
             fmtR={fmtR}
             tituloGrafico="Top marcas por receita"
-            colunas={[
-              { key: "marca", label: "Marca", bold: true },
-              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
-              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
-              { key: "num_vendas", label: "Nº Vendas", tipo: "num", align: "center", cor: "var(--muted)" },
-            ]}
+            colunas={colsMarcas}
           />
         ) : aba === "modelos" ? (
           <AbaComGrafico
@@ -230,49 +288,13 @@ export default function AnalisePage() {
             campoValor="receita"
             fmtR={fmtR}
             tituloGrafico="Top modelos por receita"
-            onClicar={(row: any, c: any) => {
-              if (c.key === "estoque_rede") setModalEstoque({ aberto: true, modelo: row.modelo, titulo: row.modelo })
-            }}
-            colunas={[
-              { key: "modelo", label: "Modelo", bold: true },
-              { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num", align: "right", bold: true },
-              { key: "receita", label: "Receita", tipo: "moeda", align: "right", cor: "var(--primary)" },
-              { key: "estoque_rede", label: "Estoque", tipo: "num", align: "right", bold: true, clicavel: true },
-            ]}
+            onClicar={onClicarModelo}
+            colunas={colsModelos}
           />
         ) : aba === "produtos" ? (
-          <TabelaOrdenavel
-            linhas={lista}
-            initialKey="qtd_vendida"
-            colunas={[
-              { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis" }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
-              { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
-              { key: "modelo", label: "Modelo" },
-              { key: "marca", label: "Marca" },
-              { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis" }, render: (r: any) => <span title={r.colecao}>{r.colecao}</span> },
-              { key: "qtd_vendida", label: "Qtd", align: "right", sortBy: (r: any) => Number(r.qtd_vendida) || 0, tdStyle: { fontWeight: 700 }, render: (r: any) => Number(r.qtd_vendida).toLocaleString("pt-BR") },
-              { key: "receita", label: "Receita", align: "right", sortBy: (r: any) => Number(r.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita) },
-              { key: "margem_media", label: "Margem", align: "center", sortBy: (r: any) => Number(r.margem_media) || 0, render: (r: any) => `${r.margem_media ?? "-"}%` },
-              { key: "estoque_rede", label: "Estoque", align: "right", sortBy: (r: any) => Number(r.estoque_rede) || 0, render: (r: any) => (
-                <span onClick={() => setModalEstoque({ aberto: true, cod: Number(r.cod_produto), titulo: r.produto })} title="Ver estoque por loja"
-                  style={{ cursor: "pointer", fontWeight: 700, textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: "3px", color: Number(r.estoque_rede) === 0 ? "var(--danger)" : "var(--text)" }}>
-                  {Number(r.estoque_rede ?? 0).toLocaleString("pt-BR")}
-                </span>
-              ) },
-            ]}
-          />
+          <TabelaOrdenavel linhas={lista} initialKey="qtd_vendida" colunas={colsProdutos} />
         ) : (
-          <TabelaOrdenavel
-            linhas={lista}
-            initialKey="receita_total"
-            colunas={[
-              { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (r: any) => r.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
-              { key: "num_vendas", label: "Nº Vendas", align: "center" },
-              { key: "pecas_vendidas", label: "Peças", align: "center", sortBy: (r: any) => Number(r.pecas_vendidas) || 0, render: (r: any) => Number(r.pecas_vendidas || 0).toLocaleString("pt-BR") },
-              { key: "receita_total", label: "Receita", align: "right", sortBy: (r: any) => Number(r.receita_total) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita_total) },
-              { key: "margem_media", label: "Margem", align: "right", sortBy: (r: any) => Number(r.margem_media) || 0, tdStyle: { fontWeight: 600 }, render: (r: any) => <span style={{ color: Number(r.margem_media) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(r.margem_media || 0).toFixed(1)}%</span> },
-            ]}
-          />
+          <TabelaOrdenavel linhas={lista} initialKey="receita_total" colunas={colsLojas} />
         )}
       </div>
 
@@ -288,7 +310,7 @@ export default function AnalisePage() {
 }
 
 // Aba de tamanhos com grafico de barras (curva de grade)
-function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => string }) {
+const AbaTamanhos = memo(function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => string }) {
   const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3","34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
   const ordenada = [...lista].sort((a, b) => Number(b.qtd_vendida || 0) - Number(a.qtd_vendida || 0))
   const maxQtd = Math.max(...ordenada.map(t => Number(t.qtd_vendida) || 0), 1)
@@ -318,4 +340,4 @@ function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => strin
       </div>
     </div>
   )
-}
+})

@@ -1,4 +1,5 @@
 "use client"
+import { memo } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
 import { useSort, seta } from "@/lib/useSort"
 
@@ -29,7 +30,7 @@ type Props = {
 const BRL = (n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 const NUM = (n: number) => Number(n || 0).toLocaleString("pt-BR")
 
-export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGrafico, corBarra = "var(--primary)", onClicar }: Props) {
+function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGrafico, corBarra = "var(--primary)", onClicar }: Props) {
   // ordena decrescente pelo campo do grafico (maior no topo) -- so pro grafico
   const ordenada = [...lista].sort((a, b) => Number(b[campoValor] || 0) - Number(a[campoValor] || 0))
   // tabela: ordenacao por clique no cabecalho (default: campo do grafico, desc)
@@ -119,3 +120,7 @@ export default function AbaComGrafico({ lista, campoLabel, campoValor, colunas, 
     </div>
   )
 }
+
+// memo: o grafico recharts e a tabela so re-renderizam quando lista/colunas mudam,
+// nao a cada clique nos filtros globais (que re-renderiza a pagina toda via Context).
+export default memo(AbaComGrafico)

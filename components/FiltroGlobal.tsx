@@ -88,9 +88,39 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     return () => { if (prodTimer.current) clearTimeout(prodTimer.current) }
   }, [buscaProduto])
 
-  function up(patch: Partial<FiltroState>) { setFiltros({ ...filtros, ...patch }) }
+  // Ref com o estado mais recente: evita que atualizacoes atrasadas (debounce)
+  // sobrescrevam mudancas feitas em outros filtros nesse meio-tempo.
+  const filtrosRef = useRef(filtros)
+  filtrosRef.current = filtros
+
+  function up(patch: Partial<FiltroState>) { setFiltros({ ...filtrosRef.current, ...patch }) }
   function toggle<T>(arr: T[], val: T): T[] { return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] }
-  function handleBuscar() { dispararBusca(); onBuscar() }
+
+  // ID com debounce: digitar nao toca o contexto global a cada tecla (era isso
+  // que re-renderizava a pagina inteira e congelava a Analise de Vendas).
+  const [idsLocal, setIdsLocal] = useState(filtros.ids)
+  const idsTimer = useRef<any>(null)
+  useEffect(() => { setIdsLocal(filtros.ids) }, [filtros.ids])  // sincroniza em limpar/filtro salvo
+  function onIdsChange(v: string) {
+    setIdsLocal(v)
+    if (idsTimer.current) clearTimeout(idsTimer.current)
+    idsTimer.current = setTimeout(() => { idsTimer.current = null; up({ ids: v }) }, 300)
+  }
+
+  // Buscar: UM unico disparo por clique. Antes chamava dispararBusca() + onBuscar(),
+  // o que gerava duas buscas concorrentes — a segunda abortava a primeira e o
+  // "finally" da abortada desligava o loading no meio, deixando o botao intermitente.
+  function handleBuscar() {
+    if (idsTimer.current) {
+      // ha ID digitado ainda nao aplicado: aplica agora e busca via versaoBusca,
+      // que roda DEPOIS do commit e enxerga o estado fresco.
+      clearTimeout(idsTimer.current); idsTimer.current = null
+      setFiltros({ ...filtrosRef.current, ids: idsLocal })
+      dispararBusca()
+      return
+    }
+    onBuscar()
+  }
 
   const estacoesDisp = useMemo(() => {
     if (!filtros.anos.length) return []
@@ -159,6 +189,8 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     filtros.colecoes.length + filtros.cores.length + (filtros.ids ? 1 : 0) + (filtros.saldoMax !== null ? 1 : 0)
 
   function limpar() {
+    if (idsTimer.current) { clearTimeout(idsTimer.current); idsTimer.current = null }
+    setIdsLocal("")
     setFiltros({ ...filtroVazio })
     setBuscaModelo(""); setBuscaMarca(""); setBuscaCor(""); setBuscaColecao(""); setBuscaProduto(""); setResProdutos([])
   }
@@ -180,12 +212,46 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
 
       {aberto && (
         <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
+          {/* 1. LOJA */}
           <div>
             <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
               {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => up({ lojas: toggle(filtros.lojas, l.id) })} />)}
             </div>
           </div>
+
+          {/* 2. ANO */}
+          <div>
+            <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {opAnos.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
+            </div>
+          </div>
+
+          {/* 3. SALDO MAXIMO (min–max) */}
+          {mostrarSaldo && (
+            <div>
+              <label style={lbl}>Saldo máximo na rede {filtros.saldoMax !== null && <span style={{ color: "var(--primary)" }}>· ≤ {filtros.saldoMax}</span>}</label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                {[0, 2, 5, 10, 20].map(v => <Chip key={v} label={v === 0 ? "Zerados" : `≤ ${v}`} small ativo={filtros.saldoMax === v} onClick={() => up({ saldoMax: filtros.saldoMax === v ? null : v })} />)}
+                {filtros.saldoMax !== null && <Chip label="✕" small ativo={false} onClick={() => up({ saldoMax: null })} />}
+              </div>
+              <input type="range" min={0} max={50} value={filtros.saldoMax ?? 50} onChange={e => up({ saldoMax: Number(e.target.value) })} style={{ width: "100%", accentColor: "var(--primary)" }} />
+            </div>
+          )}
+
+          {/* 4. MARCA */}
+          <div>
+            <label style={lbl}>Marca {filtros.marcas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.marcas.length}</span>}</label>
+            <input placeholder={`Buscar entre ${opMarcas.length} marcas...`} value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
+            {(buscaMarca || filtros.marcas.length > 0) && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {marcasVis.map(m => <Chip key={m} label={m} small ativo={filtros.marcas.includes(m)} onClick={() => up({ marcas: toggle(filtros.marcas, m) })} />)}
+              </div>
+            )}
+          </div>
+
+          {/* 5. SEXO */}
           <div>
             <label style={lbl}>Sexo {filtros.sexos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.sexos.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -193,7 +259,49 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
             </div>
           </div>
 
-          {/* PRODUTO — novo, multi-selecao com busca server-side */}
+          {/* 6. COLECOES */}
+          <div>
+            <label style={lbl}>Coleção {filtros.colecoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.colecoes.length}</span>}</label>
+            {filtros.anos.length === 0 ? (
+              <span style={{ fontSize: "11px", color: "var(--muted)" }}>Selecione um ano para listar as coleções</span>
+            ) : (<>
+              <input placeholder="Buscar coleção..." value={buscaColecao} onChange={e => setBuscaColecao(e.target.value)} style={inp} />
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {colecoesDisp.map(c => <Chip key={c} label={c} small ativo={filtros.colecoes.includes(c)} onClick={() => up({ colecoes: toggle(filtros.colecoes, c) })} />)}
+              </div>
+            </>)}
+          </div>
+
+          {/* 7. ESTACAO */}
+          <div>
+            <label style={lbl}>Estação {filtros.estacoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.estacoes.length}</span>}</label>
+            {filtros.anos.length === 0 ? (
+              <span style={{ fontSize: "11px", color: "var(--muted)" }}>Selecione um ano para listar as estações</span>
+            ) : (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {estacoesDisp.map(e => <Chip key={e} label={e} small ativo={filtros.estacoes.includes(e)} onClick={() => up({ estacoes: toggle(filtros.estacoes, e), colecoes: [] })} />)}
+              </div>
+            )}
+          </div>
+
+          {/* 8. MODELO */}
+          <div>
+            <label style={lbl}>Modelo {filtros.modelos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.modelos.length}</span>}</label>
+            <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
+            {(buscaModelo || filtros.modelos.length > 0) && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {modelosVis.map(m => <Chip key={m} label={m} small ativo={filtros.modelos.includes(m)} onClick={() => up({ modelos: toggle(filtros.modelos, m) })} />)}
+              </div>
+            )}
+          </div>
+
+          {/* 9. ID */}
+          <div>
+            <label style={lbl}>Busca por ID {filtros.ids && <span style={{ color: "var(--primary)" }}>· ativo</span>}</label>
+            <input placeholder="IDs exatos, separados por virgula ou espaco" value={idsLocal} onChange={e => onIdsChange(e.target.value)} style={inp} />
+          </div>
+
+          {/* Extras (fora da sequencia pedida, preservados): PRODUTO e COR */}
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={lbl}>Produto {filtros.produtos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.produtos.length} selecionados</span>}</label>
             <input placeholder="Digite para buscar entre 7.801 produtos (ex: JAQUETA, CALCA SKINNY...)" value={buscaProduto} onChange={e => setBuscaProduto(e.target.value)} style={inp} />
@@ -206,24 +314,6 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           </div>
 
           <div>
-            <label style={lbl}>Modelo {filtros.modelos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.modelos.length}</span>}</label>
-            <input placeholder={`Buscar entre ${opModelos.length} modelos...`} value={buscaModelo} onChange={e => setBuscaModelo(e.target.value)} style={inp} />
-            {(buscaModelo || filtros.modelos.length > 0) && (
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {modelosVis.map(m => <Chip key={m} label={m} small ativo={filtros.modelos.includes(m)} onClick={() => up({ modelos: toggle(filtros.modelos, m) })} />)}
-              </div>
-            )}
-          </div>
-          <div>
-            <label style={lbl}>Marca {filtros.marcas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.marcas.length}</span>}</label>
-            <input placeholder={`Buscar entre ${opMarcas.length} marcas...`} value={buscaMarca} onChange={e => setBuscaMarca(e.target.value)} style={inp} />
-            {(buscaMarca || filtros.marcas.length > 0) && (
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {marcasVis.map(m => <Chip key={m} label={m} small ativo={filtros.marcas.includes(m)} onClick={() => up({ marcas: toggle(filtros.marcas, m) })} />)}
-              </div>
-            )}
-          </div>
-          <div>
             <label style={lbl}>Cor {filtros.cores.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.cores.length}</span>}</label>
             <input placeholder={`Buscar entre ${opCores.length} cores...`} value={buscaCor} onChange={e => setBuscaCor(e.target.value)} style={inp} />
             {(buscaCor || filtros.cores.length > 0) && (
@@ -232,43 +322,6 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
               </div>
             )}
           </div>
-          <div>
-            <label style={lbl}>Busca por ID {filtros.ids && <span style={{ color: "var(--primary)" }}>· ativo</span>}</label>
-            <input placeholder="IDs exatos, separados por virgula ou espaco" value={filtros.ids} onChange={e => up({ ids: e.target.value })} style={inp} />
-          </div>
-          <div>
-            <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {opAnos.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
-            </div>
-          </div>
-          {filtros.anos.length > 0 && (
-            <div>
-              <label style={lbl}>Estação {filtros.estacoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.estacoes.length}</span>}</label>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {estacoesDisp.map(e => <Chip key={e} label={e} small ativo={filtros.estacoes.includes(e)} onClick={() => up({ estacoes: toggle(filtros.estacoes, e), colecoes: [] })} />)}
-              </div>
-            </div>
-          )}
-          {filtros.anos.length > 0 && (
-            <div>
-              <label style={lbl}>Coleção {filtros.colecoes.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.colecoes.length}</span>}</label>
-              <input placeholder="Buscar coleção..." value={buscaColecao} onChange={e => setBuscaColecao(e.target.value)} style={inp} />
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {colecoesDisp.map(c => <Chip key={c} label={c} small ativo={filtros.colecoes.includes(c)} onClick={() => up({ colecoes: toggle(filtros.colecoes, c) })} />)}
-              </div>
-            </div>
-          )}
-          {mostrarSaldo && (
-            <div>
-              <label style={lbl}>Saldo máximo na rede {filtros.saldoMax !== null && <span style={{ color: "var(--primary)" }}>· ≤ {filtros.saldoMax}</span>}</label>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
-                {[0, 2, 5, 10, 20].map(v => <Chip key={v} label={v === 0 ? "Zerados" : `≤ ${v}`} small ativo={filtros.saldoMax === v} onClick={() => up({ saldoMax: filtros.saldoMax === v ? null : v })} />)}
-                {filtros.saldoMax !== null && <Chip label="✕" small ativo={false} onClick={() => up({ saldoMax: null })} />}
-              </div>
-              <input type="range" min={0} max={50} value={filtros.saldoMax ?? 50} onChange={e => up({ saldoMax: Number(e.target.value) })} style={{ width: "100%", accentColor: "var(--primary)" }} />
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -32,7 +32,7 @@ const TH: CSSProperties = {
 }
 const TD: CSSProperties = { padding: "9px 12px", whiteSpace: "nowrap" }
 
-export default function TabelaOrdenavel({
+function TabelaOrdenavel({
   colunas, linhas, initialKey = null, initialDir = "desc", zebra = true, thStyle, tdStyle,
 }: Props) {
   const accessors = React.useMemo(() => {
@@ -77,3 +77,7 @@ export default function TabelaOrdenavel({
     </div>
   )
 }
+
+// memo: evita re-renderizar a tabela inteira quando a pagina re-renderiza por
+// causa de filtros — so re-renderiza se linhas/colunas mudarem de fato.
+export default React.memo(TabelaOrdenavel)
