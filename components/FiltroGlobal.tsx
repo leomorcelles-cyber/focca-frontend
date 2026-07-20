@@ -43,6 +43,10 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const [opCores,   setOpCores]   = useState<string[]>([])
   const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
   const [opAnos,    setOpAnos]    = useState<string[]>([])
+  // Cascata: opcoes compativeis com os filtros ativos (null = sem restricao)
+  const [opSexos,      setOpSexos]      = useState<string[]>(SEXOS as unknown as string[])
+  const [cascAnos,     setCascAnos]     = useState<string[] | null>(null)
+  const [cascColecoes, setCascColecoes] = useState<string[] | null>(null)
 
   const [buscaModelo,  setBuscaModelo]  = useState("")
   const [buscaMarca,   setBuscaMarca]   = useState("")
@@ -58,7 +62,9 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
   }, [])
 
-  // Opcoes EM CASCATA: rebusca /filtros com os filtros ativos (debounce 250ms)
+  // Opcoes EM CASCATA: rebusca /filtros com os filtros ativos (debounce 250ms).
+  // Cada selecao restringe as opcoes das DEMAIS dimensoes (sexo, anos e colecoes
+  // inclusos) — evita combinacoes que retornariam vazio.
   const cascataTimer = useRef<any>(null)
   useEffect(() => {
     if (cascataTimer.current) clearTimeout(cascataTimer.current)
@@ -70,23 +76,37 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
       if (filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
       if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
       if (filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
+      if (filtros.produtos.length) q.set("produto", filtros.produtos.join(","))
+      if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
+      if (filtros.ids.trim())      q.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
       fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).then(f => {
         setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []); setOpCores(f.cores || [])
+        setOpSexos(f.sexos?.length ? f.sexos : (SEXOS as unknown as string[]))
+        setCascAnos(Array.isArray(f.anos) ? f.anos.map(String) : null)
+        setCascColecoes(Array.isArray(f.colecoes) ? f.colecoes : null)
       }).catch(() => {})
     }, 250)
     return () => { if (cascataTimer.current) clearTimeout(cascataTimer.current) }
-  }, [filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos])
+  }, [filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos, filtros.produtos, filtros.lojas, filtros.ids])
 
-  // Busca de produtos server-side (debounce 300ms)
+  // Busca de produtos server-side (debounce 300ms), EM CASCATA com os filtros ativos
   useEffect(() => {
     if (prodTimer.current) clearTimeout(prodTimer.current)
     if (!buscaProduto || buscaProduto.trim().length < 2) { setResProdutos([]); return }
     prodTimer.current = setTimeout(() => {
-      fetch(`${API_URL}/produtos/buscar?q=${encodeURIComponent(buscaProduto.trim())}&limite=30`)
+      const q = new URLSearchParams({ q: buscaProduto.trim(), limite: "30" })
+      if (filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
+      if (filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
+      if (filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
+      if (filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
+      if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
+      if (filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
+      if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
+      fetch(`${API_URL}/produtos/buscar?${q}`)
         .then(r => r.json()).then(r => setResProdutos(Array.isArray(r) ? r : [])).catch(() => setResProdutos([]))
     }, 300)
     return () => { if (prodTimer.current) clearTimeout(prodTimer.current) }
-  }, [buscaProduto])
+  }, [buscaProduto, filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos, filtros.lojas])
 
   // Ref com o estado mais recente: evita que atualizacoes atrasadas (debounce)
   // sobrescrevam mudancas feitas em outros filtros nesse meio-tempo.
@@ -122,27 +142,44 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     onBuscar()
   }
 
-  const estacoesDisp = useMemo(() => {
+  // Sexos visiveis: cascata do servidor + selecionados sempre visiveis
+  const sexosVis = useMemo(() => {
+    const extras = filtros.sexos.filter(s => !opSexos.includes(s))
+    return [...extras, ...opSexos]
+  }, [opSexos, filtros.sexos])
+
+  // Anos visiveis: intersecao com a cascata (quando ativa) + selecionados
+  const anosVis = useMemo(() => {
+    const base = cascAnos ? opAnos.filter(a => cascAnos.includes(a)) : opAnos
+    const extras = filtros.anos.filter(a => !base.includes(a))
+    return [...extras, ...base]
+  }, [opAnos, cascAnos, filtros.anos])
+
+  // Colecoes-base dos anos escolhidos, restritas pela cascata (marca/sexo/etc.)
+  const colsBase = useMemo(() => {
     if (!filtros.anos.length) return []
-    const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
-    return [...new Set(cols.map(c => {
+    let cols = filtros.anos.flatMap(a => opPorAno[a] || [])
+    if (cascColecoes) cols = cols.filter(c => cascColecoes.includes(c) || filtros.colecoes.includes(c))
+    return cols
+  }, [filtros.anos, opPorAno, cascColecoes, filtros.colecoes])
+
+  const estacoesDisp = useMemo(() => {
+    return [...new Set(colsBase.map(c => {
       const u = c.toUpperCase()
       if (u.includes("ALTO VERAO") || u.includes("ALTO VERÃO")) return "ALTO VERAO"
       if (u.includes("INVERNO")) return "INVERNO"
       if (u.includes("VERAO") || u.includes("VERÃO")) return "VERAO"
       return "OUTROS"
     }))]
-  }, [filtros.anos, opPorAno])
+  }, [colsBase])
 
   const colecoesDisp = useMemo(() => {
-    if (!filtros.anos.length) return []
-    const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
-    const filt = filtros.estacoes.length > 0 ? cols.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase()))) : cols
+    const filt = filtros.estacoes.length > 0 ? colsBase.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase()))) : colsBase
     const unicas = [...new Set(filt)]
     if (buscaColecao) return unicas.filter(c => c.toLowerCase().includes(buscaColecao.toLowerCase()))
     const sel = unicas.filter(c => filtros.colecoes.includes(c))
     return [...sel, ...unicas.filter(c => !filtros.colecoes.includes(c)).slice(0, Math.max(0, 12 - sel.length))]
-  }, [filtros.anos, filtros.estacoes, filtros.colecoes, opPorAno, buscaColecao])
+  }, [colsBase, filtros.estacoes, filtros.colecoes, buscaColecao])
 
   const modelosVis = useMemo(() => {
     if (!buscaModelo && filtros.modelos.length === 0) return []
@@ -224,7 +261,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           <div>
             <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {opAnos.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
+              {anosVis.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
             </div>
           </div>
 
@@ -255,7 +292,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           <div>
             <label style={lbl}>Sexo {filtros.sexos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.sexos.length}</span>}</label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {SEXOS.map(s => <Chip key={s} label={s} ativo={filtros.sexos.includes(s)} onClick={() => up({ sexos: toggle(filtros.sexos, s) })} />)}
+              {sexosVis.map(s => <Chip key={s} label={s} ativo={filtros.sexos.includes(s)} onClick={() => up({ sexos: toggle(filtros.sexos, s) })} />)}
             </div>
           </div>
 
