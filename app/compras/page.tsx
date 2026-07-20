@@ -261,7 +261,8 @@ export default function ComprasPage() {
     if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
     if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
     if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
-    else if (filtros.anos.length && !filtros.estacoes.length) p.set("ano", filtros.anos.join(","))
+    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
+    else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
     if (filtros.saldoMax !== null)    p.set("saldo_max", String(filtros.saldoMax))
 
     try {

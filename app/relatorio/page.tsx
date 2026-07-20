@@ -149,6 +149,9 @@ export default function RelatorioPage() {
     const produtosTodos = [...new Set([...produtosGlobais, ...produtosCarrinho])]
     if (produtosTodos.length) p.set("produto", produtosTodos.join(","))
 
+    if (filtros.cores.length) p.set("cor", filtros.cores.join(","))
+    if (filtros.ids.trim())   p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+
     return p
   }
 
