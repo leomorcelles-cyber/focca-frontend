@@ -212,34 +212,29 @@ export default function RelatorioPage() {
   }
 
   // ----- EXPORT EXCEL (xls via HTML table) -----
+  // Relatorio de Compras premium (XLSX gerado no backend com openpyxl):
+  // resumo executivo + matriz de estoque por loja com coluna de SUGESTAO DE
+  // TRANSFERENCIA por giro + aba de transferencias detalhadas. Respeita os
+  // filtros globais. Se ha itens no carrinho, foca nos produtos selecionados.
   function exportExcel() {
-    let html = '<html><head><meta charset="utf-8"></head><body>'
-    html += "<h2>Relatorio Focca Jeans</h2>"
-    const s = dados?.secoes || {}
-    if (s.vendas) {
-      html += "<h3>KPIs de Vendas</h3><table border=1><tr><th>Receita</th><th>Pecas</th><th>Vendas</th><th>Ticket</th><th>Margem</th></tr>"
-      html += `<tr><td>${s.vendas.receita}</td><td>${s.vendas.pecas_vendidas}</td><td>${s.vendas.num_vendas}</td><td>${s.vendas.ticket_medio}</td><td>${s.vendas.margem_media}%</td></tr></table>`
-    }
-    if (s.topprodutos?.length) {
-      html += "<h3>Top Produtos</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Marca</th><th>Qtd</th><th>Receita</th></tr>"
-      s.topprodutos.forEach((p: any) => { html += `<tr><td>${p.produto}</td><td>${p.cor}</td><td>${p.marca}</td><td>${p.qtd}</td><td>${p.receita}</td></tr>` })
-      html += "</table>"
-    }
-    const itensExpX = agruparItens(itensAtualizados.length ? itensAtualizados : itens)
-    if (itensExpX.length) {
-      html += "<h3>Itens Selecionados</h3><table border=1><tr><th>Produto</th><th>Cor</th><th>Tam</th><th>Marca</th><th>Preco</th>"
-      LOJAS.forEach(l => html += `<th>${l.nome}</th>`)
-      html += "<th>Total</th><th>Vendido tam</th><th>Vendido produto</th><th>Receita produto</th></tr>"
-      itensExpX.forEach(it => {
-        const preco = it.precos?.length ? (Math.min(...it.precos) === Math.max(...it.precos) ? Math.min(...it.precos) : `${Math.min(...it.precos)}~${Math.max(...it.precos)}`) : ""
-        html += `<tr><td>${it.produto}</td><td>${it.cor}</td><td>${it.tamanho}</td><td>${it.marca || ""}</td><td>${preco}</td>`
-        LOJAS.forEach(l => html += `<td>${it.lojas?.[String(l.id)] ?? 0}</td>`)
-        html += `<td>${it.totalRede ?? 0}</td><td>${it.vd_pecas_tam ?? 0}</td><td>${it.vd_pecas ?? 0}</td><td>${it.vd_receita ?? 0}</td></tr>`
-      })
-      html += "</table>"
-    }
-    html += "</body></html>"
-    baixar(html, "relatorio_focca.xls", "application/vnd.ms-excel")
+    const colecoesAlvo = resolverColecoes(filtros, opPorAno)
+    const p = new URLSearchParams()
+    if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
+    if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
+    if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
+    if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
+    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
+    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
+    else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
+    if (filtros.saldoMax !== null) p.set("saldo_max", String(filtros.saldoMax))
+
+    // Carrinho: prioriza os produtos selecionados; senao usa o filtro global de produto/ID.
+    const produtosCarrinho = [...new Set(itens.map(it => it.produto))]
+    const produtos = produtosCarrinho.length ? produtosCarrinho : filtros.produtos
+    if (produtos.length) p.set("produto", produtos.join(","))
+    if (filtros.ids.trim()) p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+
+    window.open(`${API_URL}/export/compras?${p}`)
   }
 
   function exportPDF() { window.print() }
