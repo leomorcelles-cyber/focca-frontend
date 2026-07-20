@@ -25,7 +25,6 @@ export const api = {
   forecast:       (p?: Record<string, string>) => fetchAPI("/forecast", p),
   abc:            (p?: Record<string, string>) => fetchAPI("/abc", p),
   abcGiro:        (p?: Record<string, string>) => fetchAPI("/abc/giro", p),
-  margem:         (p?: Record<string, string>) => fetchAPI("/margem", p),
   resumo:         ()  => fetchAPI("/resumo"),
   matriz:         (p?: Record<string, string>) => fetchAPI("/matriz", p),
   necessidade:    (p?: Record<string, string>) => fetchAPI("/compras/necessidade", p),

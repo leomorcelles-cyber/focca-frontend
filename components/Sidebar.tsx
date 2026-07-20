@@ -8,8 +8,6 @@ const nav = [
   { href: "/",               label: "Visao Geral",      icon: "◈" },
   { href: "/compras",        label: "Compras",          icon: "↓" },
   { href: "/transferencias", label: "Transferencias",   icon: "⇄" },
-  { href: "/analise",        label: "Analise de Vendas",icon: "↗" },
-  { href: "/margem",         label: "Margem",           icon: "%" },
   { href: "/relatorio",      label: "Relatorio",        icon: "▤" },
   { href: "/chat",           label: "Chat IA",          icon: "✦" },
 ]

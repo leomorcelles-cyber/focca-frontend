@@ -1,354 +1,343 @@
 "use client"
-import { useEffect, useState, useMemo, useRef } from "react"
-import BotoesExport from "@/components/BotoesExport"
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
-import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/FiltroContext"
+
+import SeletorPeriodo from "@/components/SeletorPeriodo"
+import AbaComGrafico from "@/components/AbaComGrafico"
+import ModalEstoque from "@/components/ModalEstoque"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
-function saldoReal(v: any) { return Math.max(0, Number(v) || 0) }
+const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
+  "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
 
-export default function Home() {
-  const { filtros, versaoBusca } = useFiltros()
-  const [dados, setDados] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [buscaFeita, setBuscaFeita] = useState(false)
+type Aba = "produtos" | "tamanhos" | "colecoes" | "marcas" | "modelos" | "lojas"
+
+// Grafico de receita memoizado: o recharts e caro de re-renderizar, e antes
+// re-renderizava a cada clique em QUALQUER filtro global (o Context re-renderiza
+// a pagina inteira). Agora so re-renderiza quando os dados/granularidade mudam.
+const GraficoReceita = memo(function GraficoReceita({ dados, granularidade }: { dados: any[], granularidade: "dia" | "mes" | "ano" }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={dados} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="data" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => granularidade === "ano" ? v : granularidade === "mes" ? v.slice(2) : v.slice(5)} />
+        <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} width={45} />
+        <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
+          formatter={(v: any) => [`R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, "Receita"]} />
+        <Line type="monotone" dataKey="receita" stroke="var(--primary)" strokeWidth={2} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+})
+
+const ABAS: { key: Aba, label: string }[] = [
+  { key: "produtos",   label: "Produtos" },
+  { key: "tamanhos",   label: "Tamanhos" },
+  { key: "colecoes",   label: "Coleções" },
+  { key: "marcas",     label: "Marcas" },
+  { key: "modelos",    label: "Modelos" },
+  { key: "lojas",      label: "Lojas" },
+]
+
+export default function VisaoGeralPage() {
+  const { filtros, versaoBusca, periodo } = useFiltros()
+  const [aba, setAba] = useState<Aba>("produtos")
+  const [granularidade, setGranularidade] = useState<"dia"|"mes"|"ano">("dia")
+  const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, titulo?:string}>({aberto:false})
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
-  // Panorama global sem filtro (estado inicial)
-  const [kpisGlobal, setKpisGlobal] = useState<any>({})
-  const [marcasGlobal, setMarcasGlobal] = useState<any[]>([])
-  const [kpisFiltrado, setKpisFiltrado] = useState<any>(null)
-  const [lojasGlobal, setLojasGlobal] = useState<any[]>([])
+  const [kpis, setKpis] = useState<any>({})
+  const [receita, setReceita] = useState<any[]>([])
+  const [lista, setLista] = useState<any[]>([])  // dados da aba ativa
+  const [loading, setLoading] = useState(false)
+  const [buscaFeita, setBuscaFeita] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
-    // Carrega panorama global de inicio
-    Promise.all([
-      fetch(`${API_URL}/kpis`).then(r => r.json()),
-      fetch(`${API_URL}/marcas`).then(r => r.json()),
-      fetch(`${API_URL}/kpis/lojas`).then(r => r.json()),
-    ]).then(([k, m, l]) => {
-      setKpisGlobal(k); setMarcasGlobal(Array.isArray(m) ? m.map((x) => ({ ...x, valor_estoque_total: x.valor_venda_total ?? x.valor_estoque_total })) : []); setLojasGlobal(Array.isArray(l) ? l : [])
-    }).catch(() => {})
   }, [])
+
+  // Monta os query params a partir dos filtros globais (multi-selecao via virgula)
+  function montarParams() {
+    const p = new URLSearchParams(periodoParaParams(periodo))
+    if (filtros.lojas.length)   p.set("loja",    filtros.lojas.join(","))
+    if (filtros.marcas.length)  p.set("marca",   filtros.marcas.join(","))
+    if (filtros.modelos.length) p.set("modelo",  filtros.modelos.join(","))
+    if (filtros.sexos.length)   p.set("sexo",    filtros.sexos.join(","))
+    if (filtros.anos.length)    p.set("ano",     filtros.anos.join(","))
+
+    // Colecao: usa selecao explicita, ou resolve a partir de ano/estacao.
+    if (filtros.colecoes.length) {
+      p.set("colecao", filtros.colecoes.join(","))
+    } else if (filtros.anos.length && filtros.estacoes.length) {
+      const cols = resolverColecoes(filtros, opPorAno)
+      if (cols.length) p.set("colecao", cols.join(","))
+    }
+    return p
+  }
 
   async function buscar() {
     if (abortRef.current) abortRef.current.abort()
-    abortRef.current = new AbortController()
-    setDados([]); setLoading(true); setBuscaFeita(true)
-
-    const colecoesAlvo = resolverColecoes(filtros, opPorAno)
-    const p = new URLSearchParams({ limite: "15000" })
-    if (filtros.marcas.length)  p.set("marca",  filtros.marcas.join(","))
-    if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
-    if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
-    if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
-    if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
-    if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
-    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
-    else if (filtros.anos.length && !filtros.estacoes.length) p.set("ano", filtros.anos.join(","))
-    if (filtros.saldoMax !== null)    p.set("saldo_max", String(filtros.saldoMax))
-
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    const sig = ctrl.signal
+    setLoading(true); setBuscaFeita(true)
+    const p = montarParams()
     try {
-      const res = await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
-      let rows: any[] = await res.json()
-      if (filtros.sexos.length > 1)   rows = rows.filter(r => filtros.sexos.some(s => r.sexo?.includes(s)))
-      if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
-      if (filtros.marcas.length > 1)  rows = rows.filter(r => filtros.marcas.includes(r.marca))
-      if (filtros.anos.length > 1)    rows = rows.filter(r => filtros.anos.includes(r.ano_colecao))
-      if (colecoesAlvo.length)        rows = rows.filter(r => colecoesAlvo.includes(r.colecao))
-      setDados(rows)
-      // KPIs agregados A VENDA (sem truncar) para card/marcas/lojas filtrados
-      const pf = new URLSearchParams()
-      if (filtros.marcas.length)   pf.set("marca",   filtros.marcas.join(","))
-      if (filtros.produtos.length) pf.set("produto", filtros.produtos.join(","))
-      if (filtros.cores.length)    pf.set("cor",     filtros.cores.join(","))
-      if (filtros.ids.trim())      pf.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
-      if (filtros.modelos.length)  pf.set("modelo",  filtros.modelos.join(","))
-      if (filtros.sexos.length)    pf.set("sexo",    filtros.sexos.join(","))
-      if (filtros.lojas.length)    pf.set("loja",    filtros.lojas.join(","))
-      if (filtros.colecoes.length) {
-        pf.set("colecao", filtros.colecoes.join(","))
-      } else if (filtros.anos.length) {
-        const cols = resolverColecoes(filtros, opPorAno)
-        if (cols.length) pf.set("colecao", cols.join(","))
-        else filtros.anos.forEach(a => pf.append("ano", a))
-      }
-      if (filtros.saldoMax !== null) pf.set("saldo_max", String(filtros.saldoMax))
-      try {
-        const rf = await fetch(`${API_URL}/kpis/filtrado?${pf}`, { signal: abortRef.current.signal })
-        setKpisFiltrado(await rf.json())
-      } catch { setKpisFiltrado(null) }
+      const [k, r, l] = await Promise.all([
+        fetch(`${API_URL}/vendas/kpis?${p}`, { signal: sig }).then(r => r.json()),
+        fetch(`${API_URL}/vendas/receita?${p}`, { signal: sig }).then(r => r.json()),
+        fetch(`${API_URL}/vendas/${aba}?${p}`, { signal: sig }).then(r => r.json()),
+      ])
+      setKpis(k || {}); setReceita(Array.isArray(r) ? r : []); setLista(Array.isArray(l) ? l : [])
     } catch(e: any) { if (e?.name !== "AbortError") console.error(e) }
-    finally { setLoading(false) }
+    finally {
+      // so desliga o loading se ESTA busca ainda for a atual — uma busca abortada
+      // por outra mais nova nao pode apagar o "Buscando..." da que esta em voo
+      if (abortRef.current === ctrl) setLoading(false)
+    }
   }
 
-  useEffect(() => {
-    const temFiltro = filtros.lojas.length || filtros.sexos.length || filtros.modelos.length ||
-      filtros.marcas.length || filtros.anos.length || filtros.colecoes.length || filtros.saldoMax !== null
-    if (temFiltro) buscar()
-    else setKpisFiltrado(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versaoBusca])
+  // Busca ao entrar com filtros, ao mudar dias, ou ao trocar de aba
+  useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, periodo, aba])
 
-  const lojasFiltradas = useMemo(() =>
-    filtros.lojas.length > 0 ? LOJAS.filter(l => filtros.lojas.includes(l.id)) : LOJAS
-  , [filtros.lojas])
-
-  // Calcula KPIs a partir dos dados filtrados
-  const kpisCalc = useMemo(() => {
-    if (!buscaFeita || dados.length === 0) return null
-    let pecas = 0, valor = 0, criticos = 0, ok = 0
-    const marcas = new Set<string>(), colecoes = new Set<string>(), modelos = new Set<string>()
-    let somaMargem = 0, countMargem = 0
-
-    dados.forEach(r => {
-      const totalLinha = lojasFiltradas.reduce((s, l) => s + saldoReal(r[l.key]), 0)
-      pecas += totalLinha
-      valor += totalLinha * (Number(r.preco_venda) || 0)
-      if (totalLinha <= 2) criticos++
-      if (totalLinha > 5) ok++
-      if (r.marca) marcas.add(r.marca)
-      if (r.colecao) colecoes.add(r.colecao)
-      if (r.modelo) modelos.add(r.modelo)
-      if (r.preco_venda > 0 && r.preco_custo > 0) {
-        somaMargem += (r.preco_venda - r.preco_custo) / r.preco_venda * 100
-        countMargem++
-      }
+  const receitaDia = useMemo(() => {
+    // chave de agrupamento conforme granularidade: dia(YYYY-MM-DD), mes(YYYY-MM), ano(YYYY)
+    const chaveDe = (d: string) => {
+      if (!d) return d
+      if (granularidade === "ano") return d.slice(0, 4)
+      if (granularidade === "mes") return d.slice(0, 7)
+      return d
+    }
+    const map: Record<string, any> = {}
+    receita.forEach(r => {
+      const k = chaveDe(r.data_venda)
+      if (!map[k]) map[k] = { data: k, receita: 0, pecas: 0 }
+      map[k].receita += Number(r.receita_bruta || 0)
+      map[k].pecas += Number(r.pecas_vendidas || 0)
     })
-    return {
-      valor_total_estoque: valor, pecas_em_estoque: pecas,
-      total_criticos: criticos, total_ok: ok,
-      total_marcas: marcas.size, total_colecoes: colecoes.size, total_modelos: modelos.size,
-      margem_media_pct: countMargem > 0 ? (somaMargem / countMargem).toFixed(1) : 0,
-    }
-  }, [dados, lojasFiltradas, buscaFeita])
+    return Object.values(map).sort((a: any, b: any) => a.data.localeCompare(b.data))
+  }, [receita, granularidade])
 
-  // Top marcas a partir dos dados filtrados
-  const marcasCalc = useMemo(() => {
-    if (!buscaFeita || dados.length === 0) return null
-    const map: Record<string, number> = {}
-    dados.forEach(r => {
-      const totalLinha = lojasFiltradas.reduce((s, l) => s + saldoReal(r[l.key]), 0)
-      map[r.marca] = (map[r.marca] || 0) + totalLinha * (Number(r.preco_venda) || 0)
-    })
-    return Object.entries(map).map(([marca, valor_estoque_total]) => ({ marca, valor_estoque_total }))
-      .sort((a, b) => b.valor_estoque_total - a.valor_estoque_total)
-  }, [dados, lojasFiltradas, buscaFeita])
+  // useCallback: referencias estaveis para os componentes memoizados (AbaComGrafico,
+  // TabelaOrdenavel) nao re-renderizarem a toa quando a pagina re-renderiza.
+  const fmtR = useCallback((n: number) => `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, [])
+  const fmtRc = useCallback((n: number) => {
+    n = Number(n || 0)
+    if (n >= 1_000_000) return `R$ ${(n/1_000_000).toFixed(1)}M`
+    if (n >= 1_000) return `R$ ${(n/1_000).toFixed(0)}k`
+    return `R$ ${n.toFixed(0)}`
+  }, [])
 
-  // Resumo por loja a partir dos dados filtrados
-  const lojasCalc = useMemo(() => {
-    if (!buscaFeita || dados.length === 0) return null
-    return lojasFiltradas.map(loja => {
-      let skus = 0, pecas = 0, valor = 0, somaMargem = 0, countMargem = 0
-      dados.forEach(r => {
-        const v = saldoReal(r[loja.key])
-        if (v > 0) { skus++; pecas += v; valor += v * (Number(r.preco_venda) || 0) }
-        if (v > 0 && r.preco_venda > 0 && r.preco_custo > 0) {
-          somaMargem += (r.preco_venda - r.preco_custo) / r.preco_venda * 100
-          countMargem++
-        }
-      })
-      return { nome_loja: loja.nome, total_skus: skus, total_pecas: pecas, valor_estoque: valor,
-        margem_media_pct: countMargem > 0 ? (somaMargem / countMargem).toFixed(1) : "0" }
-    }).sort((a, b) => b.valor_estoque - a.valor_estoque)
-  }, [dados, lojasFiltradas, buscaFeita])
+  const onClicarModelo = useCallback((row: any, c: any) => {
+    if (c.key === "estoque_rede") setModalEstoque({ aberto: true, modelo: row.modelo, titulo: row.modelo })
+  }, [])
 
-  // Usa agregado do backend se ha filtro, senao global
-  // Quando ha filtro, usa os agregados do backend (corretos, a venda, sem truncar)
-  const kpis   = kpisFiltrado?.kpis   || kpisCalc   || kpisGlobal
-  const marcas = (kpisFiltrado?.marcas) || marcasCalc || marcasGlobal
-  const lojasBackend = kpisFiltrado?.lojas
-    ? LOJAS.filter(l => filtros.lojas.length === 0 || filtros.lojas.includes(l.id)).map(l => {
-        const keyPc = `${l.key}_pc`, keyV = `${l.key}_v`
-        return {
-          nome_loja: l.nome,
-          total_pecas: Number(kpisFiltrado.lojas[keyPc]) || 0,
-          valor_estoque: Number(kpisFiltrado.lojas[keyV]) || 0,
-          valor_venda_potencial: Number(kpisFiltrado.lojas[keyV]) || 0,
-          total_skus: Number(kpisFiltrado.lojas[`${l.key}_sk`]) || 0,
-          margem_media_pct: kpisFiltrado.lojas[`${l.key}_mg`] ?? "0",
-        }
-      }).filter(x => x.total_pecas > 0 || x.valor_estoque > 0)
-      .sort((a, b) => b.valor_estoque - a.valor_estoque)
-    : null
-  const lojas  = lojasBackend || lojasCalc  || lojasGlobal
+  // Colunas estaveis (useMemo) — sem isso, cada render cria arrays novos e o memo
+  // dos componentes de tabela/grafico nunca "pega".
+  const colsColecoes = useMemo(() => [
+    { key: "colecao", label: "Coleção", bold: true },
+    { key: "produtos", label: "Produtos", tipo: "num" as const, align: "center" as const },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+  ], [])
 
-  const fmt = (n: number) => n != null ? Number(n).toLocaleString("pt-BR") : "0"
-  const fmtRc = (n: number) => {
-    if (n == null) return "R$ 0"
-    if (n >= 1_000_000) return `R$ ${(n / 1_000_000).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`
-    if (n >= 1_000) return `R$ ${(n / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}k`
-    return `R$ ${Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`
-  }
-  const fmtR = (n: number) => `R$ ${n?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) ?? "0,00"}`
+  const colsMarcas = useMemo(() => [
+    { key: "marca", label: "Marca", bold: true },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+  ], [])
 
-  const temFiltroAtivo = buscaFeita && dados.length > 0
+  const colsModelos = useMemo(() => [
+    { key: "modelo", label: "Modelo", bold: true },
+    { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
+    { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
+    { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
+  ], [])
 
-  // Descricao textual dos filtros aplicados (cabecalho do export)
-  const descricaoFiltros = useMemo(() => {
-    const partes: string[] = []
-    if (filtros.marcas.length)   partes.push(`Marca: ${filtros.marcas.join(", ")}`)
-    if (filtros.modelos.length)  partes.push(`Modelo: ${filtros.modelos.join(", ")}`)
-    if (filtros.sexos.length)    partes.push(`Sexo: ${filtros.sexos.join(", ")}`)
-    if (filtros.cores.length)    partes.push(`Cor: ${filtros.cores.join(", ")}`)
-    if (filtros.colecoes.length) partes.push(`Colecao: ${filtros.colecoes.join(", ")}`)
-    if (filtros.anos.length)     partes.push(`Ano: ${filtros.anos.join(", ")}`)
-    if (filtros.lojas.length)    partes.push(`Lojas: ${filtros.lojas.length} selec.`)
-    if (filtros.ids.trim())      partes.push(`IDs: ${filtros.ids}`)
-    if (filtros.saldoMax !== null) partes.push(`Saldo max: ${filtros.saldoMax}`)
-    return partes.length ? partes.join(" | ") : "Sem filtros (rede completa)"
-  }, [filtros])
+  const colsProdutos = useMemo(() => [
+    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
+    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+    { key: "modelo", label: "Modelo" },
+    { key: "marca", label: "Marca" },
+    { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", maxWidth: "140px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.colecao}>{r.colecao}</span> },
+    { key: "qtd_vendida", label: "Qtd", align: "right" as const, sortBy: (r: any) => Number(r.qtd_vendida) || 0, tdStyle: { fontWeight: 700 }, render: (r: any) => Number(r.qtd_vendida).toLocaleString("pt-BR") },
+    { key: "receita", label: "Receita", align: "right" as const, sortBy: (r: any) => Number(r.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita) },
+    { key: "margem_media", label: "Margem", align: "center" as const, sortBy: (r: any) => Number(r.margem_media) || 0, render: (r: any) => `${r.margem_media ?? "-"}%` },
+    { key: "estoque_rede", label: "Estoque", align: "right" as const, sortBy: (r: any) => Number(r.estoque_rede) || 0, render: (r: any) => (
+      <span onClick={() => setModalEstoque({ aberto: true, cod: Number(r.cod_produto), titulo: r.produto })} title="Ver estoque por loja"
+        style={{ cursor: "pointer", fontWeight: 700, textDecoration: "underline", textDecorationStyle: "dotted" as const, textUnderlineOffset: "3px", color: Number(r.estoque_rede) === 0 ? "var(--danger)" : "var(--text)" }}>
+        {Number(r.estoque_rede ?? 0).toLocaleString("pt-BR")}
+      </span>
+    ) },
+  ], [fmtR])
 
-  async function exportarDados(formato: "csv" | "xlsx") {
-    const secoes: any[] = []
-    // Indicadores
-    if (kpis) {
-      secoes.push({
-        titulo: "Indicadores",
-        colunas: ["Metrica", "Valor"],
-        linhas: [
-          ["Valor em Estoque", fmtRc(kpis.valor_total_estoque)],
-          ["Pecas em Estoque", fmt(kpis.pecas_em_estoque)],
-          ["Margem Media", (kpis.margem_media_pct ?? "-") + "%"],
-          ["Total SKUs", fmt(kpis.total_skus)],
-          ["Marcas", fmt(kpis.total_marcas)],
-          ["Colecoes", fmt(kpis.total_colecoes)],
-          ["Modelos", fmt(kpis.total_modelos)],
-          ["Em Atencao", fmt(kpis.total_criticos)],
-          ["SKUs OK", fmt(kpis.total_ok)],
-        ],
-      })
-    }
-    // Top Marcas
-    if (marcas && marcas.length) {
-      secoes.push({
-        titulo: "Top Marcas",
-        colunas: ["#", "Marca", "Valor em Estoque"],
-        linhas: marcas.slice(0, 20).map((m: any, i: number) =>
-          [i + 1, m.marca, fmtRc(m.valor_estoque_total)]),
-      })
-    }
-    // Resumo por Loja
-    if (lojas && lojas.length) {
-      secoes.push({
-        titulo: "Resumo por Loja",
-        colunas: ["Loja", "SKUs", "Pecas", "Valor Estoque", "Margem %"],
-        linhas: lojas.map((l: any) =>
-          [l.nome_loja, l.total_skus ?? "-", fmt(l.total_pecas),
-           fmtR(l.valor_venda_potencial ?? l.valor_estoque), (l.margem_media_pct ?? "-") + "%"]),
-      })
-    }
-    if (!secoes.length) { alert("Nada para exportar ainda."); return }
-
-    const body = { titulo: "Visao Geral", formato, filtros: descricaoFiltros, secoes }
-    try {
-      const res = await fetch(`${API_URL}/export/inteligente`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) { alert("Falha ao gerar o arquivo."); return }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `Visao_Geral_${new Date().toISOString().slice(0, 10)}.${formato}`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch { alert("Erro de rede ao exportar.") }
-  }
+  const colsLojas = useMemo(() => [
+    { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (r: any) => r.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
+    { key: "num_vendas", label: "Nº Vendas", align: "center" as const },
+    { key: "pecas_vendidas", label: "Peças", align: "center" as const, sortBy: (r: any) => Number(r.pecas_vendidas) || 0, render: (r: any) => Number(r.pecas_vendidas || 0).toLocaleString("pt-BR") },
+    { key: "receita_total", label: "Receita", align: "right" as const, sortBy: (r: any) => Number(r.receita_total) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (r: any) => fmtR(r.receita_total) },
+    { key: "margem_media", label: "Margem", align: "right" as const, sortBy: (r: any) => Number(r.margem_media) || 0, tdStyle: { fontWeight: 600 }, render: (r: any) => <span style={{ color: Number(r.margem_media) >= 0 ? "var(--success)" : "var(--danger)" }}>{Number(r.margem_media || 0).toFixed(1)}%</span> },
+  ], [fmtR])
 
   return (
-    <div id="area-export" style={{ maxWidth: "100%", overflow: "hidden" }}>
-      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ maxWidth: "100%", overflow: "hidden" }}>
+      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+        <div>
           <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Visão Geral</h1>
           <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>
-            {temFiltroAtivo ? "Panorama do recorte filtrado" : "Consolidado de todas as lojas"}
+            Dinâmica de vendas por produto, tamanho, coleção, marca e loja — respeitando os filtros globais
           </p>
         </div>
-        <BotoesExport areaId="area-export" titulo="Visão Geral" onExportarDados={exportarDados} />
+        <SeletorPeriodo />
       </div>
 
-      <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo /></div>
+      <FiltroGlobal onBuscar={buscar} loading={loading} />
 
-      {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-          <div style={{ fontSize: "24px", marginBottom: "12px" }}>⏳</div>Carregando...
-        </div>
-      ) : (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: "10px", marginBottom: "24px" }}>
-            {[
-              { l: "Valor em Estoque", v: fmtRc(kpis.valor_total_estoque), full: fmtR(kpis.valor_total_estoque), c: "var(--primary)" },
-              { l: "Peças",            v: fmt(kpis.pecas_em_estoque),       c: "var(--success)" },
-              { l: "Margem Média",     v: `${kpis.margem_media_pct ?? 0}%`, c: "var(--warning)" },
-              { l: "Em Atenção",       v: fmt(kpis.total_criticos),          c: "var(--orange)" },
-              { l: "SKUs OK",          v: fmt(kpis.total_ok),                c: "var(--success)" },
-              { l: "Marcas",           v: kpis.total_marcas ?? 0 },
-              { l: "Coleções",         v: kpis.total_colecoes ?? 0 },
-              { l: "Modelos",          v: kpis.total_modelos ?? 0 },
-            ].map((k: any, i) => (
-              <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 16px", minWidth: 0, overflow: "hidden" }}>
-                <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{k.l}</div>
-                <div title={k.full || undefined} style={{ fontSize: "clamp(15px, 1.6vw, 21px)", fontWeight: 700, color: k.c || "var(--text)", marginTop: "4px", lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.v}</div>
-              </div>
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px", marginBottom: "20px" }}>
+        {[
+          { l: "Receita",        v: fmtRc(kpis.receita_bruta),     c: "var(--primary)" },
+          { l: "Peças Vendidas", v: Number(kpis.pecas_vendidas || 0).toLocaleString("pt-BR"), c: "var(--success)" },
+          { l: "Ticket Médio",   v: fmtR(kpis.ticket_medio),       c: "var(--warning)" },
+          { l: "Nº Vendas",      v: Number(kpis.num_vendas || 0).toLocaleString("pt-BR") },
+          { l: "Margem Média",   v: `${kpis.margem_media ?? 0}%`,  c: "var(--success)" },
+          { l: "Produtos",       v: Number(kpis.produtos_distintos || 0).toLocaleString("pt-BR") },
+        ].map((k, i) => (
+          <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px 16px", minWidth: 0, overflow: "hidden" }}>
+            <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{k.l}</div>
+            <div style={{ fontSize: "clamp(15px,1.8vw,21px)", fontWeight: 700, color: k.c || "var(--text)", marginTop: "4px", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Grafico de receita diaria */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+        <h2 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>Receita — {periodo.tipo === "custom" && periodo.inicio ? periodo.inicio.split("-").reverse().join("/") + " a " + periodo.fim.split("-").reverse().join("/") : "últimos " + periodo.dias + " dias"}</h2>
+          <div style={{ display: "flex", gap: "4px" }}>
+            {(["dia","mes","ano"] as const).map(g => (
+              <button key={g} onClick={() => setGranularidade(g)} style={{
+                padding: "5px 12px", borderRadius: "6px", fontSize: "12px", cursor: "pointer",
+                fontWeight: granularidade === g ? 700 : 500, border: "1px solid",
+                background: granularidade === g ? "var(--primary)" : "var(--surface2)",
+                color: granularidade === g ? "#fff" : "var(--text)",
+                borderColor: granularidade === g ? "var(--primary)" : "var(--border)",
+              }}>{g === "dia" ? "Dia" : g === "mes" ? "Mês" : "Ano"}</button>
             ))}
           </div>
-
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", marginBottom: "20px" }}>
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>Top Marcas por Valor em Estoque</h2>
-            </div>
-            <div style={{ padding: "16px" }}>
-              {marcas.slice(0, 10).map((m: any, i: number) => {
-                const max = marcas[0]?.valor_estoque_total || 1
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
-                    <div style={{ fontSize: "12px", color: "var(--muted)", width: "20px", textAlign: "right", flexShrink: 0 }}>#{i+1}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", gap: "8px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.marca}</span>
-                        <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: 700, whiteSpace: "nowrap" }}>{fmtRc(m.valor_estoque_total)}</span>
-                      </div>
-                      <div style={{ background: "var(--surface2)", borderRadius: "4px", height: "6px" }}>
-                        <div style={{ background: "var(--primary)", borderRadius: "4px", height: "6px", width: `${(m.valor_estoque_total / max) * 100}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+        </div>
+        {receitaDia.length === 0 ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
+            {loading ? "Carregando..." : "Sem vendas no período/recorte selecionado"}
           </div>
+        ) : (
+          <GraficoReceita dados={receitaDia} granularidade={granularidade} />
+        )}
+      </div>
 
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>Resumo por Loja</h2>
-            </div>
-            <TabelaOrdenavel
-              linhas={lojas}
-              initialKey="valor_estoque"
-              zebra={false}
-              colunas={[
-                { key: "nome_loja", label: "Loja", render: (l: any) => (
-                  <>
-                    <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.nome_loja}</div>
-                    {l.cidade && !String(l.nome_loja).includes("CENTRO DE DISTRIBUI") && <div style={{ fontSize: "11px", color: "var(--muted)" }}>{l.cidade}</div>}
-                  </>
-                ) },
-                { key: "total_skus", label: "SKUs", sortBy: (l: any) => Number(l.total_skus) || 0, render: (l: any) => fmt(l.total_skus) },
-                { key: "total_pecas", label: "Peças", sortBy: (l: any) => Number(l.total_pecas) || 0, render: (l: any) => fmt(l.total_pecas) },
-                { key: "valor_estoque", label: "Valor Estoque", sortBy: (l: any) => Number(l.valor_venda_potencial ?? l.valor_estoque) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (l: any) => fmtR(l.valor_venda_potencial ?? l.valor_estoque) },
-                { key: "margem_media_pct", label: "Margem", sortBy: (l: any) => Number(l.margem_media_pct) || 0, render: (l: any) => <span style={{ fontWeight: 500, color: Number(l.margem_media_pct) > 0 ? "var(--success)" : "var(--danger)" }}>{l.margem_media_pct}%</span> },
-              ]}
-            />
-          </div>
-        </>
-      )}
+      {/* Abas de dimensao */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
+        {ABAS.map(a => (
+          <button key={a.key} onClick={() => setAba(a.key)} style={{
+            padding: "8px 16px", borderRadius: "8px", fontSize: "13px", cursor: "pointer",
+            fontWeight: aba === a.key ? 700 : 500, border: "1px solid",
+            background: aba === a.key ? "var(--primary)" : "var(--surface2)",
+            color: aba === a.key ? "#fff" : "var(--text)",
+            borderColor: aba === a.key ? "var(--primary)" : "var(--border)",
+          }}>{a.label}</button>
+        ))}
+      </div>
+
+      {/* Conteudo da aba */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
+        {loading ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>Carregando...</div>
+        ) : lista.length === 0 ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>Sem dados para este recorte.</div>
+        ) : aba === "tamanhos" ? (
+          <AbaTamanhos lista={lista} fmtR={fmtR} />
+        ) : aba === "colecoes" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="colecao"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top coleções por receita"
+            colunas={colsColecoes}
+          />
+        ) : aba === "marcas" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="marca"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top marcas por receita"
+            colunas={colsMarcas}
+          />
+        ) : aba === "modelos" ? (
+          <AbaComGrafico
+            lista={lista}
+            campoLabel="modelo"
+            campoValor="receita"
+            fmtR={fmtR}
+            tituloGrafico="Top modelos por receita"
+            onClicar={onClicarModelo}
+            colunas={colsModelos}
+          />
+        ) : aba === "produtos" ? (
+          <TabelaOrdenavel linhas={lista} initialKey="qtd_vendida" colunas={colsProdutos} />
+        ) : (
+          <TabelaOrdenavel linhas={lista} initialKey="receita_total" colunas={colsLojas} />
+        )}
+      </div>
+
+      <ModalEstoque
+        aberto={modalEstoque.aberto}
+        onFechar={() => setModalEstoque({ aberto: false })}
+        codProduto={modalEstoque.cod}
+        modelo={modalEstoque.modelo}
+        titulo={modalEstoque.titulo}
+      />
     </div>
   )
 }
+
+// Aba de tamanhos com grafico de barras (curva de grade)
+const AbaTamanhos = memo(function AbaTamanhos({ lista, fmtR }: { lista: any[], fmtR: (n: number) => string }) {
+  const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3","34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
+  const ordenada = [...lista].sort((a, b) => Number(b.qtd_vendida || 0) - Number(a.qtd_vendida || 0))
+  const maxQtd = Math.max(...ordenada.map(t => Number(t.qtd_vendida) || 0), 1)
+
+  return (
+    <div style={{ padding: "20px" }}>
+      <div style={{ marginBottom: "20px" }}>
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={ordenada} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="tamanho" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={40} />
+            <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text)" }}
+              formatter={(v: any) => [Number(v).toLocaleString("pt-BR"), "Qtd vendida"]} />
+            <Bar dataKey="qtd_vendida" fill="var(--primary)" radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: "8px" }}>
+        {ordenada.map((t, i) => (
+          <div key={i} style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{t.tamanho}</div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--primary)" }}>{Number(t.qtd_vendida).toLocaleString("pt-BR")}</div>
+            <div style={{ fontSize: "10px", color: "var(--muted)" }}>{fmtR(t.receita)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+})

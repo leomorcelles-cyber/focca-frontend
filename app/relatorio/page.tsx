@@ -22,7 +22,9 @@ const SECOES = [
 
 export default function RelatorioPage() {
   const { filtros, versaoBusca } = useFiltros()
-  const [dias, setDias] = useState(30)
+  // Filtro de tempo removido da tela: o relatorio usa periodo fixo de 30 dias
+  // (com carrinho, expande para 365 — logica preservada em diasEfetivo).
+  const dias = 30
   const { itens } = useSelecao()
   const [secoesSel, setSecoesSel] = useState<string[]>(["estoque", "vendas", "topprodutos", "tamanhos"])
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
@@ -159,7 +161,7 @@ export default function RelatorioPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { gerar() /* eslint-disable-next-line */ }, [versaoBusca, dias, secoesSel.join(","), itens.length])
+  useEffect(() => { gerar() /* eslint-disable-next-line */ }, [versaoBusca, secoesSel.join(","), itens.length])
 
   function toggleSecao(k: string) {
     setSecoesSel(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])
@@ -262,9 +264,6 @@ export default function RelatorioPage() {
           <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Overview consolidado conforme os filtros e a seleção</p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <select value={dias} onChange={e => setDias(Number(e.target.value))} style={{ padding: "8px 12px", borderRadius: "8px", fontSize: "13px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)" }}>
-            <option value={7}>7 dias</option><option value={15}>15 dias</option><option value={30}>30 dias</option><option value={60}>60 dias</option><option value={90}>90 dias</option>
-          </select>
           <button onClick={exportPDF} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ PDF</button>
           <button onClick={exportExcel} style={{ padding: "8px 14px", background: "var(--success)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ Excel</button>
           <button onClick={exportCSV} style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ CSV</button>
