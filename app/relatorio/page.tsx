@@ -219,6 +219,7 @@ export default function RelatorioPage() {
   function exportExcel() {
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
     const p = new URLSearchParams()
+    if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
     if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
