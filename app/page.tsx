@@ -167,6 +167,7 @@ export default function VisaoGeralPage() {
   const colsProdutos = useMemo(() => [
     { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
     { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+    { key: "tamanho", label: "Tam", align: "center" as const, tdStyle: { fontWeight: 700 } },
     { key: "modelo", label: "Modelo" },
     { key: "marca", label: "Marca" },
     { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", maxWidth: "140px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.colecao}>{r.colecao}</span> },
