@@ -148,15 +148,18 @@ export default function RelatorioPage() {
       if (cols.length) p.set("colecao", cols.join(","))
     }
 
-    // PRODUTO: combina o filtro global de produto + os produtos do carrinho.
-    // Se houver itens no carrinho, as secoes de cima passam a focar nesses produtos.
-    const produtosGlobais = filtros.produtos || []
-    const produtosCarrinho = [...new Set(itens.map(it => it.produto))]
-    const produtosTodos = [...new Set([...produtosGlobais, ...produtosCarrinho])]
-    if (produtosTodos.length) p.set("produto", produtosTodos.join(","))
+    // CARRINHO: quando há itens, TODAS as seções focam nos SKUs EXATOS selecionados
+    // (cod_produto), nunca por nome/atributo — assim batem 1:1 com a planilha e não
+    // entram outros produtos. Sem carrinho, usa o filtro global de produto/ID.
+    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
+    if (codsCarrinho.length) {
+      p.set("cod_produto", codsCarrinho.join(","))
+    } else {
+      if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
+      if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+    }
 
     if (filtros.cores.length) p.set("cor", filtros.cores.join(","))
-    if (filtros.ids.trim())   p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
 
     return p
   }
