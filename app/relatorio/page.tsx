@@ -120,7 +120,13 @@ export default function RelatorioPage() {
         ex.totalRede = Object.values(ex.lojas).reduce((s: number, v: any) => s + Number(v), 0)
         if (it.preco_venda) ex.precos.push(Number(it.preco_venda))
         ex._ncods += 1
-        // vendido por atributos e o mesmo para os duplicados — mantem (nao soma)
+        // Vendas agora sao por cod_produto EXATO: cada duplicata do mesmo tamanho tem o
+        // seu proprio numero, entao SOMA (antes o match era por atributo e repetia).
+        ex.vd_pecas       = (Number(ex.vd_pecas) || 0)       + (Number(it.vd_pecas) || 0)
+        ex.vd_receita     = (Number(ex.vd_receita) || 0)     + (Number(it.vd_receita) || 0)
+        ex.vd_vendas      = (Number(ex.vd_vendas) || 0)      + (Number(it.vd_vendas) || 0)
+        ex.vd_pecas_tam   = (Number(ex.vd_pecas_tam) || 0)   + (Number(it.vd_pecas_tam) || 0)
+        ex.vd_receita_tam = (Number(ex.vd_receita_tam) || 0) + (Number(it.vd_receita_tam) || 0)
       }
     }
     return Array.from(mapa.values())
@@ -422,7 +428,7 @@ export default function RelatorioPage() {
             {itens.length > 0 && (
               <div style={{ ...card, borderColor: "var(--primary)" }}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "4px" }}>Itens Selecionados para Análise</h2>
-                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, match exato por atributos) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, por cod_produto exato) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>
@@ -452,7 +458,7 @@ export default function RelatorioPage() {
                           <td style={{ ...td, textAlign: "center", fontWeight: 700, color: "var(--primary)" }}>{it.totalRede ?? 0}</td>
                           <td style={{ ...td, textAlign: "center", borderLeft: "2px solid var(--border)" }}>
                             <div style={{ fontWeight: 700, fontSize: "14px", color: Number(it.vd_pecas_tam) > 0 ? "var(--success, #16a34a)" : "var(--muted)" }}>{it.vd_pecas_tam ?? 0}</div>
-                            <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}>tam {it.tamanho} · {it.vd_pecas ?? 0} no produto</div>
+                            <div style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 400 }}>tam {it.tamanho}{it._ncods > 1 ? ` · ${it._ncods} cods` : ` · ID ${it.cod_produto}`}</div>
                           </td>
                           <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{Number(it.vd_receita_tam) > 0 ? `R$ ${Number(it.vd_receita_tam).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—"}</td>
                         </tr>
@@ -466,7 +472,10 @@ export default function RelatorioPage() {
                   {Object.values(
                     (itensAtualizados.length ? itensAtualizados : itens).reduce((acc: any, it: any) => {
                       const k = `${it.produto}||${it.cor}`
-                      if (!acc[k]) acc[k] = { produto: it.produto, cor: it.cor, pecas: it.vd_pecas ?? 0, receita: it.vd_receita ?? 0 }
+                      if (!acc[k]) acc[k] = { produto: it.produto, cor: it.cor, pecas: 0, receita: 0 }
+                      // SOMA por cod exato: total = soma dos SKUs selecionados desse produto/cor
+                      acc[k].pecas += Number(it.vd_pecas) || 0
+                      acc[k].receita += Number(it.vd_receita) || 0
                       return acc
                     }, {})
                   ).map((r: any, i: number) => (
