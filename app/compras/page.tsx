@@ -9,13 +9,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
 const ORDEM_TAM = ["PP","P","M","G","GG","XG","XGG","G1","G2","G3",
   "34","36","38","40","42","44","46","48","50","P/M","G/GG","U","UNICA"]
-const STATUS_OPTS = [
+
+// Dois modos de priorizacao. SALDO = comportamento antigo (so quantidade em rede).
+// COBERTURA = decisao de compra de verdade: cruza saldo com giro (dias_cobertura).
+const STATUS_SALDO = [
   { key: "ZERADO",   label: "Zerado",   cor: "var(--danger)"  },
   { key: "CRITICO",  label: "Crítico",  cor: "var(--danger)"  },
   { key: "BAIXO",    label: "Baixo",    cor: "var(--warning)" },
   { key: "MEDIO",    label: "Médio",    cor: "var(--orange)"  },
   { key: "SAUDAVEL", label: "Saudável", cor: "var(--success)" },
 ]
+const STATUS_COBERTURA = [
+  { key: "RUPTURA",  label: "Ruptura iminente", cor: "var(--danger)"  },
+  { key: "REPOR",    label: "Repor",            cor: "var(--warning)" },
+  { key: "SAUDAVEL", label: "Saudável",         cor: "var(--success)" },
+  { key: "EXCESSO",  label: "Excesso parado",   cor: "var(--orange)"  },
+  { key: "SEM_GIRO", label: "Sem giro",         cor: "var(--muted)"   },
+]
+// prioridade de ordenacao no modo cobertura (menor = mais urgente)
+const PRIORIDADE_COB: Record<string, number> = { RUPTURA: 0, REPOR: 1, SAUDAVEL: 2, EXCESSO: 3, SEM_GIRO: 4 }
 
 function saldoReal(v: any) { return Math.max(0, Number(v) || 0) }
 function calcStatus(t: number) {
@@ -24,6 +36,23 @@ function calcStatus(t: number) {
   if (t <= 5)  return { label: "BAIXO",    cor: "var(--warning)", bg: "var(--warning-light)" }
   if (t <= 15) return { label: "MEDIO",    cor: "var(--orange)",  bg: "var(--orange-light)"  }
   return             { label: "SAUDAVEL", cor: "var(--success)", bg: "var(--success-light)" }
+}
+// Status por cobertura. giro = pecas/dia na rede; dias = saldoRede / giro (cobertura).
+// Bandas TODAS relativas ao alvo (nada fixo) porque no varejo de jeans o giro e naturalmente
+// lento — um produto com muitos dias de cobertura costuma ser normal, nao excesso.
+//   RUPTURA  : cobertura < 30% do alvo  (vai faltar bem antes de repor)
+//   REPOR    : cobertura < alvo         (abaixo do desejado)
+//   SAUDAVEL : cobertura ate 4x o alvo  (folga confortavel p/ item que sai devagar)
+//   EXCESSO  : acima de 4x o alvo       (capital realmente parado)
+function calcStatusCobertura(giro: number, dias: number | null, saldoRede: number, diasAlvo: number) {
+  if (!giro || giro <= 0 || dias === null) {
+    // nao gira: neutro (cadastro/novo/descontinuado) — nao entra na fila de reposicao
+    return { label: "SEM_GIRO", cor: "var(--muted)", bg: "var(--surface2)" }
+  }
+  if (dias < diasAlvo * 0.3) return { label: "RUPTURA",  cor: "var(--danger)",  bg: "var(--danger-light)"  }
+  if (dias < diasAlvo)       return { label: "REPOR",    cor: "var(--warning)", bg: "var(--warning-light)" }
+  if (dias <= diasAlvo * 4)  return { label: "SAUDAVEL", cor: "var(--success)", bg: "var(--success-light)" }
+  return                            { label: "EXCESSO",  cor: "var(--orange)",  bg: "var(--orange-light)"  }
 }
 function corCelula(v: number) {
   if (v === 0) return { bg: "var(--danger-light)",  color: "var(--danger)",  fw: 700 }
@@ -39,10 +68,15 @@ function useDebounce<T>(value: T, delay = 250): T {
 
 const thCell = { padding: "8px 12px", fontSize: "10px", fontWeight: 600 as const, color: "var(--muted)" as const, textTransform: "uppercase" as const, letterSpacing: "0.5px" as const, whiteSpace: "nowrap" as const, background: "var(--surface2)" as const, textAlign: "center" as const, borderBottom: "2px solid var(--border)" as const }
 
+function fmtGiro(g: number) {
+  if (!g || g <= 0) return "—"
+  return g >= 1 ? `${g.toFixed(1)}/dia` : `1 a cada ${Math.round(1 / g)}d`
+}
 const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick: () => void, mostrarMarca?: boolean }) => {
   const st = prod.status
+  const temGiro = prod.giroRede > 0
   return (
-    <div onClick={onClick} style={{ background: "var(--surface)", border: `1px solid ${["ZERADO","CRITICO"].includes(st.label) ? "var(--danger)" : "var(--border)"}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+    <div onClick={onClick} style={{ background: "var(--surface)", border: `1px solid ${["ZERADO","CRITICO","RUPTURA"].includes(st.label) ? "var(--danger)" : "var(--border)"}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "260px" }}>{prod.produto}</div>
@@ -58,6 +92,19 @@ const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick
       <div style={{ display: "flex", alignItems: "center", gap: "14px", flexShrink: 0 }}>
         {prod.precoMax > 0 && <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Preço</div><div style={{ fontSize: "13px", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}>{prod.temPrecoDivergente ? <>R$ {prod.precoMin.toFixed(0)}~{prod.precoMax.toFixed(0)} <span title="Preços divergentes na rede" style={{ fontSize: "11px" }}>⚠️</span></> : <>R$ {prod.precoMax.toFixed(0)}</>}</div></div>}
         <div style={{ textAlign: "right" }}><div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Rede</div><div style={{ fontSize: "16px", fontWeight: 700, color: prod.totalRede === 0 ? "var(--danger)" : prod.totalRede <= 5 ? "var(--warning)" : "var(--primary)" }}>{prod.totalRede}</div></div>
+        {temGiro && (
+          <div style={{ textAlign: "right", minWidth: "70px" }}>
+            <div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Cobertura</div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: st.cor }}>{prod.diasCobertura != null ? `${Math.round(prod.diasCobertura)}d` : "—"}</div>
+            <div style={{ fontSize: "10px", color: "var(--muted)" }}>{fmtGiro(prod.giroRede)}</div>
+          </div>
+        )}
+        {prod.qtdSugerida > 0 && (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>Comprar</div>
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--primary)" }}>+{prod.qtdSugerida}</div>
+          </div>
+        )}
         <span style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "4px", background: st.bg, color: st.cor, whiteSpace: "nowrap" }}>{st.label}</span>
         <span style={{ color: "var(--muted)", fontSize: "13px" }}>›</span>
       </div>
@@ -220,6 +267,8 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
 export default function ComprasPage() {
   const { filtros, versaoBusca } = useFiltros()
   const [statusFiltro, setStatusFiltro] = useState<string[]>([])
+  const [modo, setModo] = useState<"saldo" | "cobertura">("cobertura")
+  const [diasAlvo, setDiasAlvo] = useState<number>(90)
   const [dados, setDados] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [buscaFeita, setBuscaFeita] = useState(false)
@@ -294,6 +343,11 @@ export default function ComprasPage() {
       })
       prod.itens.forEach((it: any) => { it.totalReal = lojasFiltradas.reduce((s, l) => s + saldoReal(it[l.key]), 0) })
       prod.totalRede = prod.itens.reduce((s: number, it: any) => s + it.totalReal, 0)
+      // GIRO da rede: soma o giro_rede (pecas/dia) de cada SKU vindo do backend.
+      // saldoRedeFull usa total_rede (rede inteira, nao filtrado por loja) p/ cobertura coerente com o giro.
+      prod.giroRede = prod.itens.reduce((s: number, it: any) => s + (Number(it.giro_rede) || 0), 0)
+      prod.saldoRedeFull = prod.itens.reduce((s: number, it: any) => s + saldoReal(it.total_rede), 0)
+      prod.diasCobertura = prod.giroRede > 0 ? prod.saldoRedeFull / prod.giroRede : null
       // FAIXA DE PRECO (min ~ max) entre os SKUs com preco valido
       const precos = prod.itens.map((it: any) => Number(it.preco_venda) || 0).filter((p: number) => p > 0)
       prod.precoMin = precos.length ? Math.min(...precos) : 0
@@ -301,10 +355,17 @@ export default function ComprasPage() {
       prod.temPrecoDivergente = prod.precoMin !== prod.precoMax
       // quantos tamanhos distintos (nao SKUs)
       prod.tamanhosDistintos = new Set(prod.itens.map((it: any) => it.tamanho)).size
-      prod.status = calcStatus(prod.totalRede)
+      // Status conforme o modo escolhido. Cobertura = decisao de compra; saldo = comportamento antigo.
+      prod.status = modo === "cobertura"
+        ? calcStatusCobertura(prod.giroRede, prod.diasCobertura, prod.saldoRedeFull, diasAlvo)
+        : calcStatus(prod.totalRede)
+      // Qtd sugerida de compra p/ atingir o alvo de cobertura (so p/ quem gira e esta abaixo do alvo).
+      prod.qtdSugerida = prod.giroRede > 0
+        ? Math.max(0, Math.ceil(prod.giroRede * diasAlvo - prod.saldoRedeFull))
+        : 0
       return prod
     })
-  }, [dados, lojasFiltradas])
+  }, [dados, lojasFiltradas, modo, diasAlvo])
 
   const produtosStatus = useMemo(() => {
     if (statusFiltroD.length === 0) return produtos
@@ -322,15 +383,24 @@ export default function ComprasPage() {
     produtosStatus.forEach((p: any) => {
       if (!map[p.marca]) map[p.marca] = { skus: 0, criticos: 0 }
       map[p.marca].skus += p.itens.length
-      if (["ZERADO","CRITICO"].includes(p.status.label)) map[p.marca].criticos++
+      if (["ZERADO","CRITICO","RUPTURA"].includes(p.status.label)) map[p.marca].criticos++
     })
     return Object.entries(map).map(([marca, v]) => ({ marca, ...v }))
       .sort((a, b) => b.criticos - a.criticos || a.marca.localeCompare(b.marca))
   }, [produtosStatus])
 
-  const produtosVisiveis = useMemo(() =>
-    marcaSel === "GERAL" ? produtosStatus : produtosStatus.filter((p: any) => p.marca === marcaSel)
-  , [produtosStatus, marcaSel])
+  const produtosVisiveis = useMemo(() => {
+    const base = marcaSel === "GERAL" ? produtosStatus : produtosStatus.filter((p: any) => p.marca === marcaSel)
+    if (modo !== "cobertura") return base
+    // No modo cobertura, ordena por urgencia: ruptura -> repor -> saudavel -> excesso -> sem giro,
+    // e dentro do grupo pela menor cobertura (mais perto de faltar primeiro).
+    return [...base].sort((a: any, b: any) => {
+      const pa = PRIORIDADE_COB[a.status.label] ?? 5, pb = PRIORIDADE_COB[b.status.label] ?? 5
+      if (pa !== pb) return pa - pb
+      const da = a.diasCobertura ?? Infinity, db = b.diasCobertura ?? Infinity
+      return da - db
+    })
+  }, [produtosStatus, marcaSel, modo])
 
   // VIRTUALIZAÇÃO — só renderiza os produtos visíveis na viewport
   const virtualizer = useVirtualizer({
@@ -364,15 +434,35 @@ export default function ComprasPage() {
       <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
 
       {produtos.length > 0 && (
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Status:</span>
-          {STATUS_OPTS.map(opt => {
-            const count = contagemStatus[opt.key] || 0
-            if (count === 0) return null
-            const ativo = statusFiltro.includes(opt.key)
-            return <button key={opt.key} onClick={() => setStatusFiltro(prev => prev.includes(opt.key) ? prev.filter(x => x !== opt.key) : [...prev, opt.key])} style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer", fontWeight: ativo ? 700 : 400, border: "1px solid", background: ativo ? opt.cor : "var(--surface2)", color: ativo ? "#fff" : opt.cor, borderColor: opt.cor, whiteSpace: "nowrap" }}>{opt.label} ({count})</button>
-          })}
-          {statusFiltro.length > 0 && <button onClick={() => setStatusFiltro([])} style={{ padding: "4px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Todos</button>}
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          {/* Linha 1: modo de priorizacao + alvo de cobertura */}
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Priorizar por:</span>
+            <div style={{ display: "flex", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border)" }}>
+              {([["cobertura","Cobertura + giro"],["saldo","Saldo em rede"]] as const).map(([k, lbl]) => (
+                <button key={k} onClick={() => { setModo(k); setStatusFiltro([]) }} style={{ padding: "5px 12px", fontSize: "12px", fontWeight: modo === k ? 700 : 500, cursor: "pointer", border: "none", background: modo === k ? "var(--primary)" : "var(--surface2)", color: modo === k ? "#fff" : "var(--text)", whiteSpace: "nowrap" }}>{lbl}</button>
+              ))}
+            </div>
+            {modo === "cobertura" && (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "var(--muted)", whiteSpace: "nowrap" }}>Alvo de cobertura:</span>
+                {[60, 90, 120, 180].map(d => (
+                  <button key={d} onClick={() => setDiasAlvo(d)} style={{ padding: "4px 10px", borderRadius: "20px", fontSize: "12px", cursor: "pointer", fontWeight: diasAlvo === d ? 700 : 400, border: "1px solid", background: diasAlvo === d ? "var(--primary-light)" : "var(--surface2)", color: diasAlvo === d ? "var(--primary)" : "var(--text)", borderColor: diasAlvo === d ? "var(--primary)" : "var(--border)" }}>{d}d</button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Linha 2: chips de status (dinamicos por modo) */}
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Status:</span>
+            {(modo === "cobertura" ? STATUS_COBERTURA : STATUS_SALDO).map(opt => {
+              const count = contagemStatus[opt.key] || 0
+              if (count === 0) return null
+              const ativo = statusFiltro.includes(opt.key)
+              return <button key={opt.key} onClick={() => setStatusFiltro(prev => prev.includes(opt.key) ? prev.filter(x => x !== opt.key) : [...prev, opt.key])} style={{ padding: "4px 12px", borderRadius: "20px", fontSize: "12px", cursor: "pointer", fontWeight: ativo ? 700 : 400, border: "1px solid", background: ativo ? opt.cor : "var(--surface2)", color: ativo ? "#fff" : opt.cor, borderColor: opt.cor, whiteSpace: "nowrap" }}>{opt.label} ({count})</button>
+            })}
+            {statusFiltro.length > 0 && <button onClick={() => setStatusFiltro([])} style={{ padding: "4px 10px", background: "none", border: "1px solid var(--border)", borderRadius: "20px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Todos</button>}
+          </div>
         </div>
       )}
 
@@ -417,6 +507,17 @@ export default function ComprasPage() {
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--primary)" }}>{marcaSel === "GERAL" ? "Todas as marcas" : marcaSel}</div>
                 <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "2px" }}>{produtosVisiveis.length} produtos · clique para ver detalhe por tamanho e loja</div>
               </div>
+              {modo === "cobertura" && (() => {
+                const repor = produtosVisiveis.filter((p: any) => p.qtdSugerida > 0)
+                const pecas = repor.reduce((s: number, p: any) => s + p.qtdSugerida, 0)
+                if (pecas === 0) return null
+                return (
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Sugestão de compra (alvo {diasAlvo}d)</div>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>{repor.length} produtos · <span style={{ color: "var(--primary)" }}>+{pecas.toLocaleString("pt-BR")} peças</span></div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Container com scroll virtualizado */}
