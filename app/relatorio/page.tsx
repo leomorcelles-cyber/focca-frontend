@@ -229,11 +229,16 @@ export default function RelatorioPage() {
     else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
     if (filtros.saldoMax !== null) p.set("saldo_max", String(filtros.saldoMax))
 
-    // Carrinho: prioriza os produtos selecionados; senao usa o filtro global de produto/ID.
-    const produtosCarrinho = [...new Set(itens.map(it => it.produto))]
-    const produtos = produtosCarrinho.length ? produtosCarrinho : filtros.produtos
-    if (produtos.length) p.set("produto", produtos.join(","))
-    if (filtros.ids.trim()) p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+    // Carrinho: manda os SKUs EXATOS selecionados (cod_produto de cada tamanho), para que
+    // TODOS os tamanhos marcados apareçam no relatório — inclusive os zerados nas lojas.
+    // Sem carrinho, cai no filtro global de produto/ID.
+    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
+    if (codsCarrinho.length) {
+      p.set("cod_produto", codsCarrinho.join(","))
+    } else {
+      if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
+      if (filtros.ids.trim()) p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+    }
 
     window.open(`${API_URL}/export/compras?${p}`)
   }
