@@ -1,9 +1,10 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
-import { useFiltros, resolverColecoes} from "@/components/FiltroContext"
+import { useFiltros, resolverColecoes, periodoParaParams } from "@/components/FiltroContext"
 import { useSelecao } from "@/components/SelecaoContext"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
+import SeletorPeriodo from "@/components/SeletorPeriodo"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -21,10 +22,15 @@ const SECOES = [
 ]
 
 export default function RelatorioPage() {
-  const { filtros, versaoBusca } = useFiltros()
-  // Filtro de tempo removido da tela: o relatorio usa periodo fixo de 30 dias
-  // (com carrinho, expande para 365 — logica preservada em diasEfetivo).
-  const dias = 30
+  const { filtros, periodo, versaoBusca } = useFiltros()
+  // Periodo agora vem do CALENDARIO compartilhado (mesmo estado da Visao Geral,
+  // persistido em localStorage). periodoParaParams devolve {inicio,fim} (custom)
+  // ou {dias} (ultimos-N) para o backend.
+  const dias = periodo.tipo === "custom" ? 30 : periodo.dias  // so p/ rotulos locais
+  const paramsPeriodo = periodoParaParams(periodo)
+  const rotuloPeriodo = periodo.tipo === "custom" && periodo.inicio && periodo.fim
+    ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
+    : `últimos ${periodo.dias} dias`
   const { itens } = useSelecao()
   const [secoesSel, setSecoesSel] = useState<string[]>(["estoque", "vendas", "topprodutos", "tamanhos"])
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
@@ -72,7 +78,7 @@ export default function RelatorioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itens: atualizados.map(it => ({ cod_produto: it.cod_produto, produto: it.produto, cor: it.cor, colecao: it.colecao, tamanho: it.tamanho })),
-          dias: 365,
+          ...paramsPeriodo,  // {inicio,fim} do calendario, ou {dias}
         }),
       }).then(r => r.json()).then(vend => {
         if (cancelado) return
@@ -91,7 +97,8 @@ export default function RelatorioPage() {
       })
     })
     return () => { cancelado = true }
-  }, [itens])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itens, periodo.tipo, periodo.dias, periodo.inicio, periodo.fim])
 
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
@@ -133,9 +140,8 @@ export default function RelatorioPage() {
   }
 
   function montarParams() {
-    // Com carrinho, expande o periodo para 365 dias (captura historico dos produtos marcados)
-    const diasEfetivo = itens.length > 0 ? Math.max(dias, 365) : dias
-    const p = new URLSearchParams({ dias: String(diasEfetivo), secoes: secoesSel.join(",") })
+    // Periodo do calendario compartilhado (inicio/fim ou dias)
+    const p = new URLSearchParams({ ...paramsPeriodo, secoes: secoesSel.join(",") })
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
@@ -199,8 +205,8 @@ export default function RelatorioPage() {
       csv += `${v.num_vendas};${v.pecas_vendidas};${v.receita};${v.ticket_medio};${v.margem_media}\n\n`
     }
     if (s.topprodutos?.length) {
-      csv += "TOP PRODUTOS\nProduto;Cor;Modelo;Marca;Colecao;Qtd;Receita\n"
-      s.topprodutos.forEach((p: any) => { csv += `${p.produto};${p.cor};${p.modelo};${p.marca};${p.colecao};${p.qtd};${p.receita}\n` })
+      csv += "TOP PRODUTOS\nProduto;Cor;Modelo;Marca;Colecao;Vendido;Estoque;Receita\n"
+      s.topprodutos.forEach((p: any) => { csv += `${p.produto};${p.cor};${p.modelo};${p.marca};${p.colecao};${p.qtd};${p.estoque ?? 0};${p.receita}\n` })
       csv += "\n"
     }
     if (s.tamanhos?.length) {
@@ -227,7 +233,7 @@ export default function RelatorioPage() {
   // filtros globais. Se ha itens no carrinho, foca nos produtos selecionados.
   function exportExcel() {
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
-    const p = new URLSearchParams()
+    const p = new URLSearchParams(paramsPeriodo)  // periodo do calendario (inicio/fim ou dias)
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
@@ -277,6 +283,7 @@ export default function RelatorioPage() {
           <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>Overview consolidado conforme os filtros e a seleção</p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <SeletorPeriodo />
           <button onClick={exportPDF} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ PDF</button>
           <button onClick={exportExcel} style={{ padding: "8px 14px", background: "var(--success)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ Excel</button>
           <button onClick={exportCSV} style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ CSV</button>
@@ -301,7 +308,7 @@ export default function RelatorioPage() {
         <div style={{ ...card, borderColor: "var(--primary)" }}>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--primary)" }}>Relatório Focca Jeans</div>
           <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
-            Período: últimos {dias} dias · Gerado em {new Date().toLocaleString("pt-BR")}
+            Período: {rotuloPeriodo} · Gerado em {new Date().toLocaleString("pt-BR")}
             {filtros.marcas.length > 0 && ` · Marcas: ${filtros.marcas.join(", ")}`}
             {filtros.produtos.length > 0 && ` · ${filtros.produtos.length} produtos no filtro`}
           </div>
@@ -339,7 +346,7 @@ export default function RelatorioPage() {
 
             {secoesSel.includes("vendas") && s.vendas && !s.vendas.erro && (
               <div style={card}>
-                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>KPIs de Vendas ({itens.length > 0 ? "365" : dias} dias{itens.length > 0 ? " · período expandido p/ os produtos da seleção" : ""})</h2>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>KPIs de Vendas ({rotuloPeriodo})</h2>
                 {itens.length > 0 && Number(s.vendas.num_vendas || 0) === 0 && (
                   <div style={{ padding: "10px 12px", background: "var(--warning-light, #fff3cd)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)", marginBottom: "12px" }}>
                     ⚠️ Os produtos selecionados não tiveram vendas registradas no período. Isso pode indicar itens parados em estoque (sem giro).
@@ -373,7 +380,8 @@ export default function RelatorioPage() {
                     { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
                     { key: "marca", label: "Marca" },
                     { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", fontSize: "11px" } },
-                    { key: "qtd", label: "Qtd", align: "right", sortBy: (p: any) => Number(p.qtd) || 0, tdStyle: { fontWeight: 700 }, render: (p: any) => fmtN(p.qtd) },
+                    { key: "qtd", label: "Vendido", align: "right", sortBy: (p: any) => Number(p.qtd) || 0, tdStyle: { fontWeight: 700 }, render: (p: any) => fmtN(p.qtd) },
+                    { key: "estoque", label: "Estoque", align: "right", sortBy: (p: any) => Number(p.estoque) || 0, tdStyle: { fontWeight: 600 }, render: (p: any) => { const e = Number(p.estoque) || 0; return <span style={{ color: e === 0 ? "var(--danger)" : e <= 5 ? "var(--warning)" : "var(--text)" }}>{fmtN(e)}</span> } },
                     { key: "receita", label: "Receita", align: "right", sortBy: (p: any) => Number(p.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (p: any) => fmtR(p.receita) },
                   ]}
                 />
@@ -431,7 +439,7 @@ export default function RelatorioPage() {
             {itens.length > 0 && (
               <div style={{ ...card, borderColor: "var(--primary)" }}>
                 <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "4px" }}>Itens Selecionados para Análise</h2>
-                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas (365d, por cod_produto exato) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", marginBottom: "12px" }}>{itens.length} itens · saldo por loja + vendas ({rotuloPeriodo}, por cod_produto exato) {atualizandoCarrinho ? "· atualizando..." : "· dados da última sincronização"}</p>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead><tr>
@@ -484,7 +492,7 @@ export default function RelatorioPage() {
                   ).map((r: any, i: number) => (
                     <div key={i} style={{ padding: "8px 12px", background: "var(--card-bg, #f9fafb)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px" }}>
                       <span style={{ fontWeight: 600 }}>{r.produto}</span> <span style={{ color: "var(--muted)" }}>({r.cor})</span>
-                      <span style={{ marginLeft: "8px" }}>· total: <strong style={{ color: "var(--success, #16a34a)" }}>{r.pecas}</strong> peças · <strong>R$ {Number(r.receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> em 365d</span>
+                      <span style={{ marginLeft: "8px" }}>· total: <strong style={{ color: "var(--success, #16a34a)" }}>{r.pecas}</strong> peças · <strong>R$ {Number(r.receita).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> ({rotuloPeriodo})</span>
                     </div>
                   ))}
                 </div>
