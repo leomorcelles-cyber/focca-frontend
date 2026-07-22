@@ -23,6 +23,7 @@ export function chaveItem(it: { cod_produto: string | number, cor: string, taman
 type SelecaoContextType = {
   itens: ItemSelecionado[]
   adicionar: (it: ItemSelecionado) => void
+  adicionarVarios: (its: ItemSelecionado[]) => void
   remover: (chave: string) => void
   toggle: (it: ItemSelecionado) => void
   temItem: (chave: string) => boolean
@@ -43,6 +44,21 @@ export function SelecaoProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  // Adiciona MUITOS de uma vez (dedup por chave), num unico setState — para o
+  // "Selecionar todos" da pagina de compras nao travar com milhares de SKUs.
+  const adicionarVarios = useCallback((its: ItemSelecionado[]) => {
+    setItens(prev => {
+      const existentes = new Set(prev.map(p => chaveItem(p)))
+      const novos: ItemSelecionado[] = []
+      for (const it of its) {
+        const k = chaveItem(it)
+        if (existentes.has(k)) continue
+        existentes.add(k); novos.push(it)
+      }
+      return novos.length ? [...prev, ...novos] : prev
+    })
+  }, [])
+
   const remover = useCallback((chave: string) => {
     setItens(prev => prev.filter(p => chaveItem(p) !== chave))
   }, [])
@@ -59,7 +75,7 @@ export function SelecaoProvider({ children }: { children: ReactNode }) {
   const limpar = useCallback(() => setItens([]), [])
 
   return (
-    <SelecaoContext.Provider value={{ itens, adicionar, remover, toggle, temItem, limpar, total: itens.length }}>
+    <SelecaoContext.Provider value={{ itens, adicionar, adicionarVarios, remover, toggle, temItem, limpar, total: itens.length }}>
       {children}
     </SelecaoContext.Provider>
   )

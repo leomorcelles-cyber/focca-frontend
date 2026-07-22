@@ -266,6 +266,7 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
 
 export default function ComprasPage() {
   const { filtros, versaoBusca } = useFiltros()
+  const { adicionarVarios, limpar, itens: itensSelecionados } = useSelecao()
   const [statusFiltro, setStatusFiltro] = useState<string[]>([])
   const [modo, setModo] = useState<"saldo" | "cobertura">("cobertura")
   const [diasAlvo, setDiasAlvo] = useState<number>(90)
@@ -410,6 +411,26 @@ export default function ComprasPage() {
     overscan: 8,              // renderiza 8 extras acima/abaixo para scroll suave
   })
 
+  // ---- SELEÇÃO EM MASSA (para análise/relatório) ----
+  // Constrói um item de seleção (SKU) a partir de uma linha da matriz, com o
+  // MESMO formato do modal (lojas por id + totalRede) que o Relatório consome.
+  function itemSelecaoDe(it: any) {
+    const lojas: Record<string, number> = {}
+    LOJAS.forEach(l => { lojas[String(l.id)] = saldoReal(it[l.key]) })
+    return { cod_produto: it.cod_produto, produto: it.produto, cor: it.cor, tamanho: it.tamanho,
+             modelo: it.modelo, marca: it.marca, colecao: it.colecao, lojas, totalRede: it.totalReal ?? 0 }
+  }
+  // Total de SKUs (todos os tamanhos) dos produtos atualmente na lista
+  const skusVisiveis = useMemo(
+    () => produtosVisiveis.reduce((s: number, p: any) => s + (p.itens?.length || 0), 0),
+    [produtosVisiveis]
+  )
+  function selecionarTudo() {
+    const novos: any[] = []
+    produtosVisiveis.forEach((prod: any) => (prod.itens || []).forEach((it: any) => novos.push(itemSelecaoDe(it))))
+    adicionarVarios(novos)   // um único setState, dedup — pega TODOS os tamanhos
+  }
+
   function exportar() {
     const p = new URLSearchParams()
     if (marcaSel !== "GERAL") p.set("marca", marcaSel)
@@ -428,7 +449,15 @@ export default function ComprasPage() {
           <h1 style={{ fontSize: "clamp(18px,2vw,24px)", fontWeight: 700, color: "var(--text)" }}>Decisão de Compra</h1>
           <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "2px" }}>{dados.length > 0 ? `${produtosStatus.length} produtos · ${dados.length} SKUs` : "Selecione filtros e clique em Buscar"}</p>
         </div>
-        {buscaFeita && <button onClick={exportar} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ Exportar CSV</button>}
+        {buscaFeita && (
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={selecionarTudo} disabled={skusVisiveis === 0} title="Adiciona todos os produtos filtrados (todos os tamanhos) à seleção de análise" style={{ padding: "8px 14px", background: skusVisiveis === 0 ? "var(--surface2)" : "var(--success)", color: skusVisiveis === 0 ? "var(--muted)" : "#fff", border: "none", borderRadius: "8px", cursor: skusVisiveis === 0 ? "default" : "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>✓ Selecionar todos ({skusVisiveis} SKUs)</button>
+            {itensSelecionados.length > 0 && (
+              <button onClick={limpar} title="Esvazia a seleção de análise" style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>✕ Limpar seleção ({itensSelecionados.length})</button>
+            )}
+            <button onClick={exportar} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>⬇ Exportar CSV</button>
+          </div>
+        )}
       </div>
 
       <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
