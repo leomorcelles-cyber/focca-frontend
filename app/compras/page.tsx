@@ -456,13 +456,17 @@ export default function ComprasPage() {
     try {
       // "tamanhos": mantém a cor de cada linha visível e completa a grade de tamanhos.
       // "cores": abre para todas as cores daquele nome de produto.
-      const chaves = modo === "tamanhos"
-        ? [...new Set(produtosVisiveis.map((p: any) => `${p.produto}|||${p.cor}`))]
-        : [...new Set(produtosVisiveis.map((p: any) => `${p.produto}|||`))]
+      // marca+coleção entram na chave: o Microvix repete a mesma descrição em marcas
+      // diferentes, então sem esse escopo "todas as cores" trazia SKU de outra marca.
+      const chaves = [...new Set(produtosVisiveis.map((p: any) =>
+        [p.produto, modo === "tamanhos" ? (p.cor ?? "") : "", p.marca ?? "", p.colecao ?? ""].join("|||")
+      ))]
       const grades = await Promise.all(chaves.map(k => {
-        const [produto, cor] = k.split("|||")
+        const [produto, cor, marca, colecao] = k.split("|||")
         const q = new URLSearchParams({ produto })
         if (cor) q.set("cor", cor)
+        if (marca) q.set("marca", marca)
+        if (colecao) q.set("colecao", colecao)
         return fetch(`${API_URL}/produto/grade?${q}`).then(r => r.json()).catch(() => [])
       }))
       const novos = grades.flat().filter((l: any) => l && l.cod_produto != null).map((l: any) => {
