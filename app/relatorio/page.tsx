@@ -400,14 +400,18 @@ export default function RelatorioPage() {
                   {[
                     { l: "SKUs", v: fmtN(s.estoque.skus) },
                     { l: "Peças", v: fmtN(s.estoque.pecas) },
+                    // Saldo zero OU sem linha de estoque no Microvix. E o card que faltava:
+                    // SKU que zera perde a linha de `inventario` e sumia do resumo.
+                    // "Sem estoque" e nao "Ruptura": num recorte sem filtro de ano isso inclui
+                    // colecoes antigas ja descontinuadas, que nao sao ruptura a repor.
+                    { l: "Sem estoque", v: fmtN(s.estoque.ruptura), c: Number(s.estoque.ruptura) > 0 ? "var(--danger)" : undefined },
                     { l: "Críticos", v: fmtN(s.estoque.criticos) },
                     { l: "Saudáveis", v: fmtN(s.estoque.saudaveis) },
-                    { l: "Marcas", v: fmtN(s.estoque.marcas) },
                     { l: "Coleções", v: fmtN(s.estoque.colecoes) },
-                  ].map((k, i) => (
+                  ].map((k: any, i) => (
                     <div key={i} style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 12px" }}>
                       <div style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase" }}>{k.l}</div>
-                      <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text)" }}>{k.v}</div>
+                      <div style={{ fontSize: "18px", fontWeight: 700, color: k.c || "var(--text)" }}>{k.v}</div>
                     </div>
                   ))}
                 </div>

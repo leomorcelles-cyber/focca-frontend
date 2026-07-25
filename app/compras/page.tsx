@@ -433,6 +433,52 @@ export default function ComprasPage() {
     adicionarVarios(novos)   // um único setState, dedup — pega TODOS os tamanhos
   }
 
+  // ---- Seleção pela GRADE do catálogo ----------------------------------------
+  // A matriz só tem SKU com linha de estoque, e o Microvix apaga essa linha quando o
+  // item zera. Ou seja: tamanho/cor em ruptura não aparece na tela e "Selecionar todos"
+  // nunca o pega — justamente o que se quer repor. /produto/grade lê de `produtos`,
+  // então traz a grade inteira, inclusive o que está zerado.
+  const [menuSel, setMenuSel] = useState(false)
+  const [carregandoSel, setCarregandoSel] = useState<string | null>(null)
+  const menuSelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function fora(e: MouseEvent) {
+      if (menuSelRef.current && !menuSelRef.current.contains(e.target as Node)) setMenuSel(false)
+    }
+    if (menuSel) document.addEventListener("mousedown", fora)
+    return () => document.removeEventListener("mousedown", fora)
+  }, [menuSel])
+
+  async function selecionarDaGrade(modo: "tamanhos" | "cores") {
+    setMenuSel(false)
+    setCarregandoSel(modo)
+    try {
+      // "tamanhos": mantém a cor de cada linha visível e completa a grade de tamanhos.
+      // "cores": abre para todas as cores daquele nome de produto.
+      const chaves = modo === "tamanhos"
+        ? [...new Set(produtosVisiveis.map((p: any) => `${p.produto}|||${p.cor}`))]
+        : [...new Set(produtosVisiveis.map((p: any) => `${p.produto}|||`))]
+      const grades = await Promise.all(chaves.map(k => {
+        const [produto, cor] = k.split("|||")
+        const q = new URLSearchParams({ produto })
+        if (cor) q.set("cor", cor)
+        return fetch(`${API_URL}/produto/grade?${q}`).then(r => r.json()).catch(() => [])
+      }))
+      const novos = grades.flat().filter((l: any) => l && l.cod_produto != null).map((l: any) => {
+        const lojas: Record<string, number> = {}
+        LOJAS.forEach(x => { lojas[String(x.id)] = Number(l.lojas?.[String(x.id)]) || 0 })
+        return {
+          cod_produto: l.cod_produto, produto: l.produto, cor: l.cor, tamanho: l.tamanho,
+          modelo: l.modelo, marca: l.marca, colecao: l.colecao, lojas,
+          totalRede: Object.values(lojas).reduce((s: number, v: number) => s + v, 0),
+        }
+      })
+      adicionarVarios(novos)
+    } catch (e) { console.error(e) }
+    finally { setCarregandoSel(null) }
+  }
+
   function exportar() {
     const p = new URLSearchParams()
     if (marcaSel !== "GERAL") p.set("marca", marcaSel)
@@ -454,6 +500,36 @@ export default function ComprasPage() {
         {buscaFeita && (
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={selecionarTudo} disabled={skusVisiveis === 0} title="Adiciona todos os produtos filtrados (todos os tamanhos) à seleção de análise" style={{ padding: "8px 14px", background: skusVisiveis === 0 ? "var(--surface2)" : "var(--success)", color: skusVisiveis === 0 ? "var(--muted)" : "#fff", border: "none", borderRadius: "8px", cursor: skusVisiveis === 0 ? "default" : "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>✓ Selecionar todos ({skusVisiveis} SKUs)</button>
+
+            {/* Seleção pela grade do catálogo: alcança tamanhos/cores em ruptura, que
+                não aparecem na matriz porque perderam a linha de estoque no Microvix. */}
+            <div ref={menuSelRef} style={{ position: "relative", display: "inline-block" }}>
+              <button
+                onClick={() => setMenuSel(v => !v)}
+                disabled={skusVisiveis === 0 || carregandoSel !== null}
+                title="Selecionar a grade completa do catálogo, incluindo o que está zerado"
+                style={{ padding: "8px 12px", background: skusVisiveis === 0 ? "var(--surface2)" : "var(--surface)", color: skusVisiveis === 0 ? "var(--muted)" : "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: skusVisiveis === 0 ? "default" : "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}
+              >
+                {carregandoSel ? "Selecionando..." : "Selecionar grade ▾"}
+              </button>
+              {menuSel && (
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: "290px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", boxShadow: "0 12px 32px rgba(0,0,0,0.18)", padding: "6px", zIndex: 9999 }}>
+                  {[
+                    { k: "tamanhos" as const, t: "Todos os tamanhos", d: "Completa a grade de cada cor listada, inclusive tamanhos zerados que não aparecem na tabela." },
+                    { k: "cores" as const, t: "Todas as cores", d: "Traz todas as cores de cada produto listado, com a grade inteira de tamanhos." },
+                  ].map(o => (
+                    <button key={o.k} onClick={() => selecionarDaGrade(o.k)}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", background: "transparent", border: "none", borderRadius: "7px", cursor: "pointer", color: "var(--text)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                      <div style={{ fontSize: "13px", fontWeight: 600 }}>{o.t}</div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px", lineHeight: 1.35 }}>{o.d}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {itensSelecionados.length > 0 && (
               <button onClick={limpar} title="Esvazia a seleção de análise" style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>✕ Limpar seleção ({itensSelecionados.length})</button>
             )}
