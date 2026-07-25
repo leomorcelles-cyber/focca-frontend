@@ -279,16 +279,25 @@ export default function RelatorioPage() {
   // FOCCA um "produto" e um NOME e cada nome cobre varios SKUs (cor x tamanho x colecao).
   const recorte = useMemo(() => {
     const out: { rotulo: string, valor: string, forte?: boolean }[] = []
-    // vem do backend mesmo com a secao de estoque desligada
-    const nSkus = Number(dados?.recorte?.skus ?? s.estoque?.skus)
     out.push({ rotulo: "Período", valor: rotuloPeriodo, forte: true })
+
+    // Dois tamanhos DIFERENTES, nao dá para trocar um pelo outro: as vendas saem de todos
+    // os SKUs do catálogo que casam com os filtros, e o Resumo de Estoque só enxerga os
+    // que ainda têm estoque — SKUs descontinuados venderam no período e sumiram da matriz.
+    const nRecorte = Number(dados?.recorte?.skus_recorte)
+    const nEstoque = Number(dados?.recorte?.skus_estoque ?? s.estoque?.skus)
+    const tamanho = Number.isFinite(nRecorte)
+      ? `${fmtN(nRecorte)} SKUs${Number.isFinite(nEstoque) ? ` · ${fmtN(nEstoque)} com estoque` : ""}`
+      : (Number.isFinite(nEstoque) ? `${fmtN(nEstoque)} SKUs com estoque` : "")
 
     const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
     if (codsCarrinho.length) {
       out.push({ rotulo: "Seleção de Compras", valor: `${codsCarrinho.length} SKUs exatos`, forte: true })
     } else if (filtros.produtos.length) {
       const nomes = filtros.produtos.length === 1 ? "1 nome" : `${filtros.produtos.length} nomes`
-      out.push({ rotulo: "Produto", valor: Number.isFinite(nSkus) ? `${nomes} · ${fmtN(nSkus)} SKUs` : nomes, forte: true })
+      out.push({ rotulo: "Produto", valor: tamanho ? `${nomes} · ${tamanho}` : nomes, forte: true })
+    } else if (tamanho) {
+      out.push({ rotulo: "Recorte", valor: tamanho, forte: true })
     }
     if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.split(/[\s,;]+/).filter(Boolean).join(", ") })
 
@@ -381,7 +390,12 @@ export default function RelatorioPage() {
           <>
             {secoesSel.includes("estoque") && s.estoque && !s.estoque.erro && (
               <div style={card}>
-                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>Resumo de Estoque</h2>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "2px" }}>Resumo de Estoque</h2>
+                <p style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "12px" }}>
+                  Saldo de hoje{filtros.lojas.length && filtros.lojas.length < LOJAS.length
+                    ? ` nas lojas selecionadas (${filtros.lojas.map(id => LOJAS_NOMES[String(id)] || String(id)).join(", ")})`
+                    : " na rede"}. Conta só os SKUs que ainda têm registro de estoque — os descontinuados aparecem nas vendas abaixo, não aqui.
+                </p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: "10px" }}>
                   {[
                     { l: "SKUs", v: fmtN(s.estoque.skus) },
@@ -402,7 +416,13 @@ export default function RelatorioPage() {
 
             {secoesSel.includes("vendas") && s.vendas && !s.vendas.erro && (
               <div style={card}>
-                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px" }}>KPIs de Vendas ({rotuloPeriodo})</h2>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "2px" }}>KPIs de Vendas ({rotuloPeriodo})</h2>
+                <p style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "12px" }}>
+                  Tudo que foi vendido no período dentro do recorte, inclusive SKUs que já saíram de linha
+                  {Number(dados?.recorte?.skus_recorte) > Number(dados?.recorte?.skus_estoque)
+                    ? ` — por isso a base aqui (${fmtN(Number(dados.recorte.skus_recorte))} SKUs) é maior que a do estoque acima (${fmtN(Number(dados.recorte.skus_estoque))})`
+                    : ""}. Líquido: devoluções entram como negativas.
+                </p>
                 {itens.length > 0 && Number(s.vendas.num_vendas || 0) === 0 && (
                   <div style={{ padding: "10px 12px", background: "var(--warning-light, #fff3cd)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)", marginBottom: "12px" }}>
                     ⚠️ Os produtos selecionados não tiveram vendas registradas no período. Isso pode indicar itens parados em estoque (sem giro).
