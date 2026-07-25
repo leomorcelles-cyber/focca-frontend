@@ -272,6 +272,44 @@ export default function RelatorioPage() {
   }
 
   const s = dados?.secoes || {}
+
+  // RECORTE APLICADO: espelho do calendario + filtros globais + carrinho. Cada filtro
+  // ativo vira um chip; os inativos somem. O de PRODUTO mostra tambem quantos SKUs os
+  // nomes alcancam — e a informacao que faltava para os KPIs fazerem sentido, porque no
+  // FOCCA um "produto" e um NOME e cada nome cobre varios SKUs (cor x tamanho x colecao).
+  const recorte = useMemo(() => {
+    const out: { rotulo: string, valor: string, forte?: boolean }[] = []
+    // vem do backend mesmo com a secao de estoque desligada
+    const nSkus = Number(dados?.recorte?.skus ?? s.estoque?.skus)
+    out.push({ rotulo: "Período", valor: rotuloPeriodo, forte: true })
+
+    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
+    if (codsCarrinho.length) {
+      out.push({ rotulo: "Seleção de Compras", valor: `${codsCarrinho.length} SKUs exatos`, forte: true })
+    } else if (filtros.produtos.length) {
+      const nomes = filtros.produtos.length === 1 ? "1 nome" : `${filtros.produtos.length} nomes`
+      out.push({ rotulo: "Produto", valor: Number.isFinite(nSkus) ? `${nomes} · ${fmtN(nSkus)} SKUs` : nomes, forte: true })
+    }
+    if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.split(/[\s,;]+/).filter(Boolean).join(", ") })
+
+    if (filtros.lojas.length) {
+      const todas = filtros.lojas.length === LOJAS.length
+      out.push({ rotulo: "Lojas", valor: todas ? "rede inteira" : filtros.lojas.map(id => LOJAS_NOMES[String(id)] || String(id)).join(", ") })
+    }
+    if (filtros.marcas.length)   out.push({ rotulo: "Marca",   valor: filtros.marcas.join(", ") })
+    if (filtros.anos.length)     out.push({ rotulo: "Ano da coleção", valor: filtros.anos.join(", ") })
+    if (filtros.estacoes.length) out.push({ rotulo: "Estação", valor: filtros.estacoes.join(", ") })
+    if (filtros.colecoes.length) out.push({ rotulo: "Coleção", valor: filtros.colecoes.join(", ") })
+    if (filtros.modelos.length)  out.push({ rotulo: "Modelo",  valor: filtros.modelos.join(", ") })
+    if (filtros.sexos.length)    out.push({ rotulo: "Sexo",    valor: filtros.sexos.join(", ") })
+    if (filtros.cores.length)    out.push({ rotulo: "Cor",     valor: filtros.cores.join(", ") })
+    if (filtros.saldoMax !== null) out.push({ rotulo: "Saldo na rede", valor: filtros.saldoMax === 0 ? "zerados" : `≤ ${filtros.saldoMax}` })
+
+    if (out.length === 1) out.push({ rotulo: "Filtros", valor: "nenhum — rede inteira" })
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, itens, rotuloPeriodo, dados])
+
   const card = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px", marginBottom: "16px" }
   const th = { padding: "8px 12px", textAlign: "left" as const, fontSize: "10px", color: "var(--muted)" as const, fontWeight: 600 as const, textTransform: "uppercase" as const, borderBottom: "1px solid var(--border)", whiteSpace: "nowrap" as const }
   const td = { padding: "8px 12px", fontSize: "12px", borderBottom: "1px solid var(--border)" }
@@ -311,9 +349,24 @@ export default function RelatorioPage() {
         <div style={{ ...card, borderColor: "var(--primary)" }}>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--primary)" }}>Relatório Focca Jeans</div>
           <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>
-            Período: {rotuloPeriodo} · Gerado em {new Date().toLocaleString("pt-BR")}
-            {filtros.marcas.length > 0 && ` · Marcas: ${filtros.marcas.join(", ")}`}
-            {filtros.produtos.length > 0 && ` · ${filtros.produtos.length} produtos no filtro`}
+            Gerado em {new Date().toLocaleString("pt-BR")}
+          </div>
+
+          {/* RECORTE APLICADO — o relatorio declara exatamente o que gerou os numeros.
+              Antes o cabecalho dizia so "3 produtos no filtro", o que enganava: no FOCCA
+              um "produto" e um NOME (descricao basica) e cada nome cobre varios SKUs
+              (cor x tamanho x colecao), entao 3 nomes viravam centenas de SKUs sem aviso. */}
+          <div style={{ marginTop: "10px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {recorte.map((f, i) => (
+              <span key={i} style={{
+                fontSize: "11px", padding: "4px 10px", borderRadius: "20px",
+                background: f.forte ? "var(--primary)" : "var(--surface2)",
+                color: f.forte ? "#fff" : "var(--text)",
+                border: `1px solid ${f.forte ? "var(--primary)" : "var(--border)"}`,
+              }}>
+                <span style={{ opacity: 0.75 }}>{f.rotulo}:</span> <strong>{f.valor}</strong>
+              </span>
+            ))}
           </div>
           {itens.length > 0 && (
             <div className="no-print" style={{ marginTop: "10px", padding: "8px 12px", background: "var(--primary-light)", borderRadius: "8px", fontSize: "12px", color: "var(--primary)", display: "flex", alignItems: "center", gap: "8px" }}>
