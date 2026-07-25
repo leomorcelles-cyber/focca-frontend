@@ -146,13 +146,16 @@ export default function RelatorioPage() {
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
     if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
-    if (filtros.anos.length)     p.set("ano",     filtros.anos.join(","))
-    if (filtros.colecoes.length) {
-      p.set("colecao", filtros.colecoes.join(","))
-    } else if (filtros.anos.length && filtros.estacoes.length) {
-      const cols = resolverColecoes(filtros, opPorAno)
-      if (cols.length) p.set("colecao", cols.join(","))
-    }
+
+    // ANO / ESTACAO / COLECAO — mesma regra da tela de Compras (mutuamente exclusivas),
+    // para que o relatorio recorte exatamente o mesmo universo que a matriz de compras.
+    const colecoesAlvo = resolverColecoes(filtros, opPorAno)
+    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
+    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
+    else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
+
+    // Saldo maximo na rede: era o unico filtro que a tela mostrava e nunca enviava.
+    if (filtros.saldoMax !== null) p.set("saldo_max", String(filtros.saldoMax))
 
     // CARRINHO: quando há itens, TODAS as seções focam nos SKUs EXATOS selecionados
     // (cod_produto), nunca por nome/atributo — assim batem 1:1 com a planilha e não

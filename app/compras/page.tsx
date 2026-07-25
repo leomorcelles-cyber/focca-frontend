@@ -321,7 +321,9 @@ export default function ComprasPage() {
       if (filtros.sexos.length > 1)   rows = rows.filter(r => filtros.sexos.some(s => r.sexo?.includes(s)))
       if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
       if (filtros.marcas.length > 1)  rows = rows.filter(r => filtros.marcas.includes(r.marca))
-      if (filtros.anos.length > 1)    rows = rows.filter(r => filtros.anos.includes(r.ano_colecao))
+      // ANO nao e refiltrado aqui: o backend ja recorta por ano deduzido do NOME da colecao.
+      // A coluna ano_colecao e NULL nas colecoes com ano de 2 digitos ("VERAO 26 FOREVER"),
+      // entao este filtro derrubava 1.526 SKUs de 2026 que o backend tinha acabado de trazer.
       if (colecoesAlvo.length)        rows = rows.filter(r => colecoesAlvo.includes(r.colecao))
       setDados(rows)
     } catch(e: any) { if (e?.name !== "AbortError") console.error(e) }
