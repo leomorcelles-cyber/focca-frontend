@@ -47,7 +47,7 @@ export default function VisaoGeralPage() {
   const { filtros, versaoBusca, periodo } = useFiltros()
   const [aba, setAba] = useState<Aba>("produtos")
   const [granularidade, setGranularidade] = useState<"dia"|"mes"|"ano">("dia")
-  const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, titulo?:string}>({aberto:false})
+  const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, colecao?:string, marca?:string, titulo?:string}>({aberto:false})
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
   const [kpis, setKpis] = useState<any>({})
@@ -161,12 +161,22 @@ export default function VisaoGeralPage() {
 
   // Colunas estaveis (useMemo) — sem isso, cada render cria arrays novos e o memo
   // dos componentes de tabela/grafico nunca "pega".
+  // Estoque clicavel tambem em Colecoes e Marcas. Tamanhos e Lojas ficam de fora:
+  // a matriz nao tem saldo por tamanho, e a aba de Lojas ja e' o proprio recorte.
+  const onClicarColecao = useCallback((row: any, c: any) => {
+    if (c.key === "estoque_rede") setModalEstoque({ aberto: true, colecao: row.colecao, titulo: row.colecao })
+  }, [])
+  const onClicarMarca = useCallback((row: any, c: any) => {
+    if (c.key === "estoque_rede") setModalEstoque({ aberto: true, marca: row.marca, titulo: row.marca })
+  }, [])
+
   const colsColecoes = useMemo(() => [
     { key: "colecao", label: "Coleção", bold: true },
     { key: "produtos", label: "Produtos", tipo: "num" as const, align: "center" as const },
     { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
     { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
     { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+    { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
   ], [])
 
   const colsMarcas = useMemo(() => [
@@ -174,6 +184,7 @@ export default function VisaoGeralPage() {
     { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
     { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
     { key: "num_vendas", label: "Nº Vendas", tipo: "num" as const, align: "center" as const, cor: "var(--muted)" },
+    { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
   ], [])
 
   const colsModelos = useMemo(() => [
@@ -294,6 +305,7 @@ export default function VisaoGeralPage() {
             fmtR={fmtR}
             tituloGrafico="Top coleções por receita"
             colunas={colsColecoes}
+            onClicar={onClicarColecao}
           />
         ) : aba === "marcas" ? (
           <AbaComGrafico
@@ -303,6 +315,7 @@ export default function VisaoGeralPage() {
             fmtR={fmtR}
             tituloGrafico="Top marcas por receita"
             colunas={colsMarcas}
+            onClicar={onClicarMarca}
           />
         ) : aba === "modelos" ? (
           <AbaComGrafico
@@ -327,7 +340,14 @@ export default function VisaoGeralPage() {
         codProduto={modalEstoque.cod}
         modelo={modalEstoque.modelo}
         titulo={modalEstoque.titulo}
-        extraQuery={queryEstoqueModal}
+        extraQuery={(() => {
+          // URLSearchParams para a dimensao clicada SOBRESCREVER o filtro global —
+          // concatenar string duplicaria `colecao=` e o backend leria o valor errado
+          const q = new URLSearchParams(queryEstoqueModal)
+          if (modalEstoque.colecao) q.set("colecao", modalEstoque.colecao)
+          if (modalEstoque.marca) q.set("marca", modalEstoque.marca)
+          return q.toString()
+        })()}
       />
     </div>
   )
