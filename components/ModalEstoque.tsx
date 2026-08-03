@@ -9,25 +9,31 @@ type Props = {
   codProduto?: number
   modelo?: string
   titulo?: string
+  /** dimensao clicada (colecao/marca/produto...) + filtros globais, ja em query string.
+   *  Sem isso o modal ignorava os filtros: com o Hype desmarcado ele aparecia mesmo assim. */
+  extraQuery?: string
 }
 
 // Modal: destrincha o estoque da rede por loja.
 // Serve para decidir TRANSFERIR em vez de COMPRAR: se o CD ou outra loja
 // tem saldo parado, nao ha razao para comprar.
-export default function ModalEstoque({ aberto, onFechar, codProduto, modelo, titulo }: Props) {
+export default function ModalEstoque({ aberto, onFechar, codProduto, modelo, titulo, extraQuery }: Props) {
   const [dados, setDados] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!aberto || (!codProduto && !modelo)) return
+    if (!aberto || (!codProduto && !modelo && !extraQuery)) return
     setLoading(true); setDados(null)
-    const q = codProduto ? `cod_produto=${codProduto}` : `modelo=${encodeURIComponent(modelo || "")}`
-    fetch(`${API_URL}/estoque/detalhe?${q}`)
+    const partes: string[] = []
+    if (codProduto) partes.push(`cod_produto=${codProduto}`)
+    if (modelo) partes.push(`modelo=${encodeURIComponent(modelo)}`)
+    if (extraQuery) partes.push(extraQuery)
+    fetch(`${API_URL}/estoque/detalhe?${partes.join("&")}`)
       .then(r => r.json())
       .then(d => setDados(d))
       .catch(() => setDados({ erro: "falha ao carregar" }))
       .finally(() => setLoading(false))
-  }, [aberto, codProduto, modelo])
+  }, [aberto, codProduto, modelo, extraQuery])
 
   if (!aberto) return null
 

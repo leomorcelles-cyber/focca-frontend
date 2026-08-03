@@ -140,6 +140,25 @@ export default function VisaoGeralPage() {
     if (c.key === "estoque_rede") setModalEstoque({ aberto: true, modelo: row.modelo, titulo: row.modelo })
   }, [])
 
+  // Filtros globais repassados ao modal de estoque. Sem isso ele consultava a rede
+  // inteira: com o Hype desmarcado, o Hype aparecia no modal do mesmo jeito.
+  // Nao inclui produto/cod_produto — quem clica ja define a dimensao.
+  const queryEstoqueModal = useMemo(() => {
+    const p = new URLSearchParams()
+    if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
+    if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
+    if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
+    if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
+    if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
+    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
+    else if (filtros.anos.length && filtros.estacoes.length) {
+      const cols = resolverColecoes(filtros, opPorAno)
+      if (cols.length) p.set("colecao", cols.join(","))
+    } else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
+    if (filtros.saldoMax !== null) p.set("saldo_max", String(filtros.saldoMax))
+    return p.toString()
+  }, [filtros, opPorAno])
+
   // Colunas estaveis (useMemo) — sem isso, cada render cria arrays novos e o memo
   // dos componentes de tabela/grafico nunca "pega".
   const colsColecoes = useMemo(() => [
@@ -308,6 +327,7 @@ export default function VisaoGeralPage() {
         codProduto={modalEstoque.cod}
         modelo={modalEstoque.modelo}
         titulo={modalEstoque.titulo}
+        extraQuery={queryEstoqueModal}
       />
     </div>
   )
