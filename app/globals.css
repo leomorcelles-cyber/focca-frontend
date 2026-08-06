@@ -85,3 +85,67 @@ html {
     print-color-adjust: exact !important;
   }
 }
+
+/* ===================== ACABAMENTO GLOBAL =====================
+   As telas usam estilo inline, entao aqui so entram propriedades que o inline
+   NAO define — assim o acabamento propaga para as 5 paginas sem disputar com
+   nenhum componente nem exigir tocar em JSX. */
+
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numeros alinhados em coluna: sem isso as tabelas de receita/quantidade
+   "dancam" porque cada digito tem largura diferente. */
+table, input, .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+/* Foco visivel so via teclado — mostra onde se esta sem poluir o clique de mouse */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Transicao suave em tudo que e' interativo (o inline define as cores, nao a
+   transicao — entao nao ha conflito) */
+button, a, input, select, [role="button"] {
+  transition: background-color .14s ease, border-color .14s ease,
+              color .14s ease, box-shadow .14s ease, opacity .14s ease;
+}
+button:not(:disabled):hover { filter: brightness(0.97); }
+button:not(:disabled):active { transform: translateY(0.5px); }
+button:disabled { cursor: default; }
+
+/* Linhas de tabela reagem ao mouse: ajuda a seguir a linha em tabelas largas,
+   que e o caso da matriz de compras e do relatorio */
+tbody tr { transition: background-color .12s ease; }
+tbody tr:hover { background-color: var(--surface2); }
+
+/* Barra de rolagem discreta (Firefox + WebKit) */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+
+::selection { background: var(--primary); color: #fff; }
+
+/* Respeita quem pediu menos animacao no sistema operacional */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
