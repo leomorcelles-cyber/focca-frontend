@@ -260,6 +260,33 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     return out
   }, [filtros])
 
+  // ATALHOS — a pessoa pensa "o que preciso repor?", nao "saldo_max <= 2 na colecao
+  // 2026". Cada botao monta o recorte inteiro e ja dispara a busca, para quem nao
+  // conhece os 11 campos conseguir chegar a uma resposta util sem entender nenhum.
+  const anoAtual = String(new Date().getFullYear())
+  const atalhos = useMemo(() => {
+    const l: { rotulo: string, dica: string, aplica: () => void }[] = []
+    if (mostrarSaldo) {
+      l.push({
+        rotulo: "Precisa repor", dica: "Itens com 2 peças ou menos na rede",
+        aplica: () => up({ ...filtroVazio, saldoMax: 2 }),
+      })
+      l.push({
+        rotulo: "Sem estoque", dica: "Itens zerados na rede — as rupturas",
+        aplica: () => up({ ...filtroVazio, saldoMax: 0 }),
+      })
+    }
+    if (opAnos.includes(anoAtual)) l.push({
+      rotulo: "Coleção atual", dica: `Só as coleções de ${anoAtual}`,
+      aplica: () => up({ ...filtroVazio, anos: [anoAtual] }),
+    })
+    l.push({
+      rotulo: "Só as lojas", dica: "Exclui o CD — só o que está na ponta de venda",
+      aplica: () => up({ ...filtrosRef.current, lojas: LOJAS.filter(x => x.id !== 2).map(x => x.id) }),
+    })
+    return l
+  }, [mostrarSaldo, opAnos, anoAtual])
+
   function limpar() {
     if (idsTimer.current) { clearTimeout(idsTimer.current); idsTimer.current = null }
     setIdsLocal("")
@@ -281,6 +308,24 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           <FiltrosSalvos />
         </div>
       </div>
+
+      {atalhos.length > 0 && (
+        <div style={{ padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.7px", opacity: 0.75 }}>Atalhos</span>
+          {atalhos.map((a, i) => (
+            <button key={i} onClick={() => { a.aplica(); dispararBusca() }} title={a.dica}
+              style={{
+                padding: "6px 14px", borderRadius: "999px", cursor: "pointer",
+                fontSize: "12px", fontWeight: 600, color: "var(--text)",
+                background: "var(--surface2)", border: "1px dashed var(--border)",
+                transition: "border-color .12s, color .12s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)" }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text)" }}
+            >{a.rotulo}</button>
+          ))}
+        </div>
+      )}
 
       {ativos.length > 0 && (
         <div style={{
