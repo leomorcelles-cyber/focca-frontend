@@ -225,6 +225,31 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     filtros.produtos.length + filtros.marcas.length + filtros.anos.length + filtros.estacoes.length +
     filtros.colecoes.length + filtros.cores.length + (filtros.ids ? 1 : 0) + (filtros.saldoMax !== null ? 1 : 0)
 
+  // BARRA DE FILTROS ATIVOS — antes o cabecalho dizia so "13 ativos" e era preciso
+  // abrir o painel e varrer 11 campos para saber QUAIS. Cada chip remove o proprio
+  // valor, entao dá para desfazer sem caçar o campo de origem.
+  const ativos = useMemo(() => {
+    const out: { rotulo: string, valor: string, remover: () => void }[] = []
+    filtros.lojas.forEach(id => out.push({
+      rotulo: "Loja", valor: LOJAS.find(l => l.id === id)?.nome || String(id),
+      remover: () => up({ lojas: filtros.lojas.filter(x => x !== id) }),
+    }))
+    filtros.marcas.forEach(v => out.push({ rotulo: "Marca", valor: v, remover: () => up({ marcas: filtros.marcas.filter(x => x !== v) }) }))
+    filtros.anos.forEach(v => out.push({ rotulo: "Ano", valor: v, remover: () => up({ anos: filtros.anos.filter(x => x !== v), estacoes: [], colecoes: [] }) }))
+    filtros.estacoes.forEach(v => out.push({ rotulo: "Estação", valor: v, remover: () => up({ estacoes: filtros.estacoes.filter(x => x !== v) }) }))
+    filtros.colecoes.forEach(v => out.push({ rotulo: "Coleção", valor: v, remover: () => up({ colecoes: filtros.colecoes.filter(x => x !== v) }) }))
+    filtros.modelos.forEach(v => out.push({ rotulo: "Modelo", valor: v, remover: () => up({ modelos: filtros.modelos.filter(x => x !== v) }) }))
+    filtros.sexos.forEach(v => out.push({ rotulo: "Sexo", valor: v, remover: () => up({ sexos: filtros.sexos.filter(x => x !== v) }) }))
+    filtros.cores.forEach(v => out.push({ rotulo: "Cor", valor: v, remover: () => up({ cores: filtros.cores.filter(x => x !== v) }) }))
+    filtros.produtos.forEach(v => out.push({ rotulo: "Produto", valor: v, remover: () => up({ produtos: filtros.produtos.filter(x => x !== v) }) }))
+    if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.trim(), remover: () => { setIdsLocal(""); up({ ids: "" }) } })
+    if (filtros.saldoMax !== null) out.push({
+      rotulo: "Saldo", valor: filtros.saldoMax === 0 ? "zerados" : `≤ ${filtros.saldoMax}`,
+      remover: () => up({ saldoMax: null }),
+    })
+    return out
+  }, [filtros])
+
   function limpar() {
     if (idsTimer.current) { clearTimeout(idsTimer.current); idsTimer.current = null }
     setIdsLocal("")
@@ -246,6 +271,27 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
           <FiltrosSalvos />
         </div>
       </div>
+
+      {ativos.length > 0 && (
+        <div style={{
+          padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center",
+          borderBottom: aberto ? "1px solid var(--border)" : "none",
+        }}>
+          {ativos.map((f, i) => (
+            <span key={i} title={`${f.rotulo}: ${f.valor}`} style={{
+              display: "inline-flex", alignItems: "center", gap: "6px", maxWidth: "260px",
+              fontSize: "11px", padding: "4px 6px 4px 10px", borderRadius: "20px",
+              background: "var(--primary-light, #eef2ff)", color: "var(--primary)",
+              border: "1px solid var(--primary)",
+            }}>
+              <span style={{ opacity: 0.7 }}>{f.rotulo}</span>
+              <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.valor}</strong>
+              <button onClick={f.remover} aria-label={`Remover ${f.rotulo} ${f.valor}`} title="Remover"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: "13px", lineHeight: 1, padding: "0 2px", opacity: 0.65 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {aberto && (
         <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
