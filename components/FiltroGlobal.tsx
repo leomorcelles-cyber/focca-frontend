@@ -18,20 +18,30 @@ export const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEM
 
 function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
   return (
+    // Ativo vs disponivel precisa ser obvio a distancia: antes so o preenchimento
+    // mudava e chip de OPCAO parecia selecionado (aconteceu com Estacao/Colecao).
+    // Agora o ativo ganha peso, sombra e um respiro extra a esquerda pelo marcador.
     <button onClick={onClick} style={{
-      padding: small ? "3px 10px" : "5px 12px", borderRadius: "20px",
+      padding: small ? "4px 11px" : "6px 13px", borderRadius: "999px",
       fontSize: small ? "11px" : "12px", cursor: "pointer",
-      fontWeight: ativo ? 600 : 400, border: "1px solid",
-      background: ativo ? "var(--primary)" : "var(--surface2)",
-      color: ativo ? "#fff" : "var(--text)",
+      fontWeight: ativo ? 600 : 500, border: "1px solid",
+      background: ativo ? "var(--primary)" : "transparent",
+      color: ativo ? "#fff" : "var(--muted)",
       borderColor: ativo ? "var(--primary)" : "var(--border)",
-      transition: "all 0.1s", whiteSpace: "nowrap" as const,
-    }}>{label}</button>
+      boxShadow: ativo ? "0 1px 3px rgba(0,0,0,0.16)" : "none",
+      transition: "background .12s, color .12s, border-color .12s, box-shadow .12s",
+      whiteSpace: "nowrap" as const, lineHeight: 1.35,
+    }}
+      onMouseEnter={e => { if (!ativo) { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--text)" } }}
+      onMouseLeave={e => { if (!ativo) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)" } }}
+    >{label}</button>
   )
 }
 
-const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.5px", marginBottom: "8px", display: "block" as const }
-const inp = { padding: "5px 10px", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "100%", display: "block" as const }
+// Rotulo com mais respiro e menos ruido: os 11 campos competiam entre si com o
+// mesmo peso visual. Aqui ele recua para segundo plano e os chips ganham a cena.
+const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 700 as const, textTransform: "uppercase" as const, letterSpacing: "0.7px", marginBottom: "10px", display: "block" as const, opacity: 0.75 }
+const inp = { padding: "7px 11px", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "100%", display: "block" as const }
 
 type Props = { onBuscar: () => void, loading?: boolean, mostrarSaldo?: boolean }
 
@@ -294,7 +304,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
       )}
 
       {aberto && (
-        <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "20px" }}>
+        <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "24px 28px" }}>
           {/* 1. LOJA */}
           <div>
             <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
