@@ -64,7 +64,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const [buscaColecao, setBuscaColecao] = useState("")
   const [buscaProduto, setBuscaProduto] = useState("")
   const [resProdutos,  setResProdutos]  = useState<string[]>([])  // resultados da busca server-side
-  const [aberto, setAberto] = useState(true)
+  const [aberto, setAberto] = useState(false)  // drawer: abre pelo botao
   const prodTimer = useRef<any>(null)
 
   // Colecoes-por-ano: carga unica
@@ -297,8 +297,21 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "16px", overflow: "hidden" }}>
       <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: aberto ? "1px solid var(--border)" : "none", background: "var(--surface2)" }}>
-        <button onClick={() => setAberto(!aberto)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "var(--text)" }}>
-          {aberto ? "▲" : "▼"} Filtros globais {totalFiltros > 0 ? `· ${totalFiltros} ativos` : ""}
+        {/* gatilho do drawer: precisa parecer acao, nao titulo de secao */}
+        <button onClick={() => setAberto(true)} style={{
+          display: "inline-flex", alignItems: "center", gap: "8px",
+          padding: "8px 16px", borderRadius: "8px", cursor: "pointer",
+          border: `1px solid ${totalFiltros > 0 ? "var(--primary)" : "var(--border)"}`,
+          background: "var(--surface)", color: totalFiltros > 0 ? "var(--primary)" : "var(--text)",
+          fontSize: "13px", fontWeight: 700,
+        }}>
+          <span aria-hidden>⚙</span> Filtros
+          {totalFiltros > 0 && (
+            <span style={{
+              background: "var(--primary)", color: "#fff", borderRadius: "999px",
+              fontSize: "11px", fontWeight: 700, padding: "1px 8px", lineHeight: 1.6,
+            }}>{totalFiltros}</span>
+          )}
         </button>
         <div style={{ display: "flex", gap: "8px" }}>
           {totalFiltros > 0 && <button onClick={limpar} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>✕ Limpar</button>}
@@ -348,8 +361,35 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
         </div>
       )}
 
+      {/* DRAWER lateral. Antes a grade dos 11 campos era inline e comia ~300px do topo,
+          empurrando a tabela — o que o usuario veio ver — para fora da dobra. Aqui ela
+          desliza ao lado: os dados seguem visiveis atras, e os campos ganham altura
+          inteira da tela. Esconder o painel so e seguro porque a barra de filtros
+          ativos (acima) continua na pagina mostrando o recorte. */}
       {aberto && (
-        <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "24px 28px" }}>
+        <>
+          <div onClick={() => setAberto(false)} style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 998,
+          }} />
+          <div role="dialog" aria-label="Filtros globais" style={{
+            position: "fixed", top: 0, right: 0, bottom: 0, width: "min(460px, 92vw)",
+            background: "var(--surface)", borderLeft: "1px solid var(--border)",
+            boxShadow: "-8px 0 32px rgba(0,0,0,0.18)", zIndex: 999,
+            display: "flex", flexDirection: "column",
+          }}>
+            <div style={{
+              padding: "16px 20px", borderBottom: "1px solid var(--border)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "var(--surface2)", flexShrink: 0,
+            }}>
+              <strong style={{ fontSize: "14px", color: "var(--text)" }}>Filtros globais</strong>
+              <button onClick={() => setAberto(false)} aria-label="Fechar filtros" style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "20px", lineHeight: 1, color: "var(--muted)", padding: "0 4px",
+              }}>×</button>
+            </div>
+
+            <div style={{ padding: "18px 20px", display: "grid", gridTemplateColumns: "1fr", gap: "22px", overflowY: "auto", flex: 1 }}>
           {/* 1. LOJA */}
           <div>
             <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
@@ -460,7 +500,16 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
               </div>
             )}
           </div>
-        </div>
+            </div>
+
+            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: "8px", flexShrink: 0, background: "var(--surface2)" }}>
+              <button onClick={limpar} style={{ padding: "10px 16px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>Limpar tudo</button>
+              <button onClick={() => { handleBuscar(); setAberto(false) }} disabled={loading} style={{ flex: 1, padding: "10px 16px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: loading ? "default" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading ? 0.7 : 1 }}>
+                {loading ? "Buscando..." : "Aplicar filtros"}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
