@@ -5,6 +5,7 @@ import { useFiltros, resolverColecoes, periodoParaParams } from "@/components/Fi
 import { useSelecao } from "@/components/SelecaoContext"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 import SeletorPeriodo from "@/components/SeletorPeriodo"
+import MiniFoto from "@/components/MiniFoto"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -64,12 +65,13 @@ export default function RelatorioPage() {
           lojas,
           totalRede: Object.values(lojas).reduce((s: number, v: number) => s + v, 0),
           preco_venda: linha.preco_venda ?? null,
+          imagem: linha.imagem ?? null,
         }
       })
       // Atualiza cada item do carrinho com os dados frescos (mantem o snapshot se nao achar)
       const atualizados = itens.map(it => {
         const fresco = mapa[String(it.cod_produto)]
-        return fresco ? { ...it, lojas: fresco.lojas, totalRede: fresco.totalRede, preco_venda: fresco.preco_venda } : it
+        return fresco ? { ...it, lojas: fresco.lojas, totalRede: fresco.totalRede, preco_venda: fresco.preco_venda, imagem: fresco.imagem } : it
       })
 
       // Busca VENDAS por match EXATO de atributos (backend resolve pelos cod_produto)
@@ -456,7 +458,12 @@ export default function RelatorioPage() {
                   linhas={s.topprodutos}
                   initialKey="receita"
                   colunas={[
-                    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600 } },
+                    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600 }, render: (p: any) => (
+                      <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <MiniFoto url={p.imagem} alt={p.produto} />
+                        <span>{p.produto}</span>
+                      </span>
+                    ) },
                     { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
                     { key: "marca", label: "Marca" },
                     { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", fontSize: "11px" } },
@@ -537,7 +544,12 @@ export default function RelatorioPage() {
                           : (precoMin === precoMax ? `R$ ${precoMin.toFixed(2)}` : `R$ ${precoMin.toFixed(2)}~${precoMax.toFixed(2)}`)
                         return (
                         <tr key={i}>
-                          <td style={{ ...td, fontWeight: 600 }}>{it.produto}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <MiniFoto url={it.imagem} tam={26} alt={it.produto} />
+                              <span>{it.produto}</span>
+                            </span>
+                          </td>
                           <td style={{ ...td, color: "var(--muted)" }}>{it.cor}</td>
                           <td style={{ ...td, fontWeight: 700, textAlign: "center" }}>{it.tamanho}</td>
                           <td style={td}>{it.marca}</td>
