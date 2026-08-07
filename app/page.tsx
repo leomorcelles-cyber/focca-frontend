@@ -7,6 +7,7 @@ import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/Fil
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import AbaComGrafico from "@/components/AbaComGrafico"
 import ModalEstoque from "@/components/ModalEstoque"
+import MiniFoto from "@/components/MiniFoto"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
@@ -195,7 +196,12 @@ export default function VisaoGeralPage() {
   ], [])
 
   const colsProdutos = useMemo(() => [
-    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "220px", overflow: "hidden" as const, textOverflow: "ellipsis" as const }, render: (r: any) => <span title={r.produto}>{r.produto}</span> },
+    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "260px" }, render: (r: any) => (
+      <span title={r.produto} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <MiniFoto url={r.imagem} alt={r.produto} />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.produto}</span>
+      </span>
+    ) },
     { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
     { key: "tamanho", label: "Tam", align: "center" as const, tdStyle: { fontWeight: 700 } },
     { key: "modelo", label: "Modelo" },
