@@ -72,13 +72,32 @@ export default function ModalEstoque({ aberto, onFechar, codProduto, modelo, tit
           }}>×</button>
         </div>
 
-        <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)", marginBottom: "16px" }}>
-          {titulo || dados?.info?.produto || modelo || "—"}
-          {dados?.info?.cor && (
-            <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: "13px" }}>
-              {" · "}{dados.info.cor}{dados.info.tamanho ? ` · ${dados.info.tamanho}` : ""}
-            </span>
+        {/* Foto do SKU. A URL vem do blob da Linx, entao o navegador busca direto —
+            nao passa pela nossa API. ~72% dos SKUs em estoque tem foto; quando falta,
+            a imagem some sozinha (onError) e o titulo ocupa a linha inteira. */}
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "16px" }}>
+          {dados?.imagem && (
+            <img
+              src={dados.imagem}
+              alt=""
+              loading="lazy"
+              width={56}
+              height={56}
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+              style={{
+                width: "56px", height: "56px", objectFit: "cover", flexShrink: 0,
+                borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface2)",
+              }}
+            />
           )}
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>
+            {titulo || dados?.info?.produto || modelo || "—"}
+            {dados?.info?.cor && (
+              <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: "13px" }}>
+                {" · "}{dados.info.cor}{dados.info.tamanho ? ` · ${dados.info.tamanho}` : ""}
+              </span>
+            )}
+          </div>
         </div>
 
         {loading && (
