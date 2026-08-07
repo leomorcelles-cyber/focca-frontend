@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useRef, memo } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
+import MiniFoto from "@/components/MiniFoto"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
 import { useSelecao, chaveItem } from "@/components/SelecaoContext"
 
@@ -78,6 +79,11 @@ const LinhaProduto = memo(({ prod, onClick, mostrarMarca }: { prod: any, onClick
   return (
     <div onClick={onClick} style={{ background: "var(--surface)", border: `1px solid ${["ZERADO","CRITICO","RUPTURA"].includes(st.label) ? "var(--danger)" : "var(--border)"}`, borderRadius: "10px", padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+        {/* Foto do 1o SKU do grupo produto+cor: e o que distingue na hora os cadastros
+            de nome quase igual ("CAMISETA BASICA MASC" vs "CAMISETA  BASICA MASC"),
+            que o texto sozinho nunca resolve. lazy + tamanho fixo porque a tabela e
+            virtualizada e pode ter milhares de linhas. */}
+        <MiniFoto url={prod.itens?.find((i: any) => i.imagem)?.imagem} tam={34} alt={prod.produto} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "260px" }}>{prod.produto}</div>
           <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "1px" }}>{prod.cor} · {prod.modelo}</div>
@@ -178,7 +184,10 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "14px", maxWidth: "900px", width: "100%", maxHeight: "86vh", overflow: "auto", border: "1px solid var(--border)" }}>
         <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", position: "sticky", top: 0, background: "var(--surface)", zIndex: 2 }}>
           <div>
-            <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{prod.produto}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <MiniFoto url={prod.itens?.find((i: any) => i.imagem)?.imagem} tam={44} alt={prod.produto} />
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)" }}>{prod.produto}</div>
+            </div>
             <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "3px" }}>{corAtiva} &middot; {prod.modelo} &middot; {prod.marca} &middot; {prod.colecao}</div>
             <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "4px" }}>Marque os tamanhos para adicionar a selecao de analise</div>
           </div>
