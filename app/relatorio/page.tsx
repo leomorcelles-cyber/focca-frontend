@@ -33,7 +33,7 @@ export default function RelatorioPage() {
   const rotuloPeriodo = periodo.tipo === "custom" && periodo.inicio && periodo.fim
     ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
     : `últimos ${periodo.dias} dias`
-  const { itens } = useSelecao()
+  const { itens, limpar: limparSelecao } = useSelecao()
   const [secoesSel, setSecoesSel] = useState<string[]>(["estoque", "vendas", "topprodutos", "tamanhos"])
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
   const [dados, setDados] = useState<any>(null)
@@ -107,6 +107,33 @@ export default function RelatorioPage() {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => setOpPorAno(c.por_ano || {})).catch(() => {})
   }, [])
 
+  // MODO DO RELATORIO — carrinho vazio = panorama, carrinho cheio = foco.
+  // Uma fonte so' para o recorte, o banner e os dois exports: as tres copias
+  // desta lista podiam divergir e o relatorio mudava de modo sem ninguem ver.
+  const codsCarrinho = useMemo(
+    () => [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))],
+    [itens]
+  )
+  // O carrinho SUBSTITUI o filtro de produto/IDs (os demais filtros continuam
+  // valendo). Quando os dois estao preenchidos, quem manda e' o carrinho — e
+  // isso precisa aparecer na tela, nao so' no codigo.
+  const filtroProdutoIgnorado = codsCarrinho.length > 0 && (filtros.produtos.length > 0 || filtros.ids.trim() !== "")
+
+  // Filtros de CATÁLOGO: são os que se cruzam com a seleção e podem zerá-la.
+  // Loja e período ficam de fora — recortam a venda, não o universo de SKUs.
+  const filtrosCatalogoAtivos = useMemo(() => {
+    const f: string[] = []
+    if (filtros.marcas.length)   f.push("marca")
+    if (filtros.modelos.length)  f.push("modelo")
+    if (filtros.sexos.length)    f.push("sexo")
+    if (filtros.anos.length)     f.push("ano")
+    if (filtros.estacoes.length) f.push("estação")
+    if (filtros.colecoes.length) f.push("coleção")
+    if (filtros.cores.length)    f.push("cor")
+    if (filtros.saldoMax !== null) f.push("saldo na rede")
+    return f
+  }, [filtros])
+
   // Agrupa SKUs duplicados (mesmo produto+cor+tamanho, cods/precos diferentes do Microvix)
   // numa linha so: soma saldo das lojas, junta faixa de preco, vendido aparece uma vez.
   function agruparItens(lista: any[]) {
@@ -163,7 +190,6 @@ export default function RelatorioPage() {
     // CARRINHO: quando há itens, TODAS as seções focam nos SKUs EXATOS selecionados
     // (cod_produto), nunca por nome/atributo — assim batem 1:1 com a planilha e não
     // entram outros produtos. Sem carrinho, usa o filtro global de produto/ID.
-    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
     if (codsCarrinho.length) {
       p.set("cod_produto", codsCarrinho.join(","))
     } else {
@@ -253,7 +279,6 @@ export default function RelatorioPage() {
     // Carrinho: manda os SKUs EXATOS selecionados (cod_produto de cada tamanho), para que
     // TODOS os tamanhos marcados apareçam no relatório — inclusive os zerados nas lojas.
     // Sem carrinho, cai no filtro global de produto/ID.
-    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
     if (codsCarrinho.length) {
       p.set("cod_produto", codsCarrinho.join(","))
     } else {
@@ -293,16 +318,21 @@ export default function RelatorioPage() {
       ? `${fmtN(nRecorte)} SKUs${Number.isFinite(nEstoque) ? ` · ${fmtN(nEstoque)} com estoque` : ""}`
       : (Number.isFinite(nEstoque) ? `${fmtN(nEstoque)} SKUs com estoque` : "")
 
-    const codsCarrinho = [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))]
     if (codsCarrinho.length) {
-      out.push({ rotulo: "Seleção de Compras", valor: `${codsCarrinho.length} SKUs exatos`, forte: true })
-    } else if (filtros.produtos.length) {
-      const nomes = filtros.produtos.length === 1 ? "1 nome" : `${filtros.produtos.length} nomes`
-      out.push({ rotulo: "Produto", valor: tamanho ? `${nomes} · ${tamanho}` : nomes, forte: true })
-    } else if (tamanho) {
-      out.push({ rotulo: "Recorte", valor: tamanho, forte: true })
+      out.push({ rotulo: "Seleção", valor: `${codsCarrinho.length} SKUs exatos`, forte: true })
+      // O chip do produto ignorado vale para o PDF: o aviso da tela e' `no-print`,
+      // entao sem ele a versao impressa nao contaria que o filtro foi trocado.
+      if (filtros.produtos.length) out.push({ rotulo: "Produto (ignorado pela seleção)", valor: filtros.produtos.length === 1 ? "1 nome" : `${filtros.produtos.length} nomes` })
+      if (filtros.ids.trim()) out.push({ rotulo: "IDs (ignorados pela seleção)", valor: filtros.ids.split(/[\s,;]+/).filter(Boolean).join(", ") })
+    } else {
+      if (filtros.produtos.length) {
+        const nomes = filtros.produtos.length === 1 ? "1 nome" : `${filtros.produtos.length} nomes`
+        out.push({ rotulo: "Produto", valor: tamanho ? `${nomes} · ${tamanho}` : nomes, forte: true })
+      } else if (tamanho) {
+        out.push({ rotulo: "Recorte", valor: tamanho, forte: true })
+      }
+      if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.split(/[\s,;]+/).filter(Boolean).join(", ") })
     }
-    if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.split(/[\s,;]+/).filter(Boolean).join(", ") })
 
     if (filtros.lojas.length) {
       const todas = filtros.lojas.length === LOJAS.length
@@ -380,9 +410,30 @@ export default function RelatorioPage() {
               </span>
             ))}
           </div>
+          {/* MODO — carrinho vazio = panorama, carrinho cheio = foco. Declarado na tela
+              porque o carrinho e' um estado global: da' para chegar aqui com item
+              marcado em OUTRA tela e o relatorio ja' vir recortado. */}
           {itens.length > 0 && (
-            <div className="no-print" style={{ marginTop: "10px", padding: "8px 12px", background: "var(--primary-light)", borderRadius: "8px", fontSize: "12px", color: "var(--primary)", display: "flex", alignItems: "center", gap: "8px" }}>
-              🛒 As seções abaixo estão focadas nos {[...new Set(itens.map(it => it.produto))].length} produtos da sua seleção (carrinho). Esvazie o carrinho para ver o panorama completo.
+            <div className="no-print" style={{ marginTop: "10px", padding: "8px 12px", background: "var(--primary-light)", borderRadius: "8px", fontSize: "12px", color: "var(--primary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: "220px" }}>
+                🛒 <strong>Modo foco</strong> — as seções abaixo estão recortadas nos {codsCarrinho.length} SKUs
+                ({[...new Set(itens.map(it => it.produto))].length} produto{[...new Set(itens.map(it => it.produto))].length === 1 ? "" : "s"}) da sua seleção.
+              </span>
+              <button onClick={limparSelecao} style={{ padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "6px", color: "var(--primary)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>
+                Esvaziar e ver o panorama
+              </button>
+            </div>
+          )}
+
+          {/* O filtro de produto continua ACESO na barra de filtros, mas nao esta'
+              valendo: montarParams manda cod_produto do carrinho no lugar dele.
+              Sem este aviso a pessoa le' o filtro na tela e o numero de outro recorte. */}
+          {filtroProdutoIgnorado && (
+            <div className="no-print" style={{ marginTop: "8px", padding: "8px 12px", background: "var(--warning-light, #fff3cd)", border: "1px solid var(--warning, #856404)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)" }}>
+              ⚠️ A seleção está mandando sobre o filtro de{" "}
+              {filtros.produtos.length ? <strong>Produto{filtros.ids.trim() ? " e IDs" : ""}</strong> : <strong>IDs</strong>}
+              {" "}— ele está marcado na barra acima, mas <strong>não</strong> foi aplicado. Os demais filtros (loja, marca, coleção, cor, saldo) continuam valendo.
+              {" "}Esvazie a seleção para voltar a filtrar por nome.
             </div>
           )}
         </div>
@@ -430,10 +481,24 @@ export default function RelatorioPage() {
                     ? ` — por isso a base aqui (${fmtN(Number(dados.recorte.skus_recorte))} SKUs) é maior que a do estoque acima (${fmtN(Number(dados.recorte.skus_estoque))})`
                     : ""}. Líquido: devoluções entram como negativas.
                 </p>
+                {/* Zero vendas tem DUAS causas e o diagnostico errado custa caro:
+                    ou os itens nao giraram, ou o cruzamento da seleção com os demais
+                    filtros nao sobrou SKU nenhum (carrinho da marca A + filtro marca B
+                    zera tudo). `skus_recorte === 0` separa os dois casos: universo vazio
+                    e' o cruzamento, nao a falta de giro. Antes afirmava "sem giro"
+                    sempre — auditado em 2026-08-08 contra a API. */}
                 {itens.length > 0 && Number(s.vendas.num_vendas || 0) === 0 && (
-                  <div style={{ padding: "10px 12px", background: "var(--warning-light, #fff3cd)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)", marginBottom: "12px" }}>
-                    ⚠️ Os produtos selecionados não tiveram vendas registradas no período. Isso pode indicar itens parados em estoque (sem giro).
-                  </div>
+                  Number(dados?.recorte?.skus_recorte) === 0 ? (
+                    <div style={{ padding: "10px 12px", background: "var(--danger-light, #fde8e8)", borderRadius: "8px", fontSize: "12px", color: "var(--danger)", marginBottom: "12px" }}>
+                      ⚠️ <strong>O cruzamento não sobrou nenhum SKU.</strong> Os {codsCarrinho.length} itens da seleção
+                      não passam pelos outros filtros ativos{filtrosCatalogoAtivos.length ? ` (${filtrosCatalogoAtivos.join(", ")})` : ""}.
+                      Isto <strong>não</strong> quer dizer que não venderam — limpe esses filtros para ver os números da seleção.
+                    </div>
+                  ) : (
+                    <div style={{ padding: "10px 12px", background: "var(--warning-light, #fff3cd)", borderRadius: "8px", fontSize: "12px", color: "var(--warning, #856404)", marginBottom: "12px" }}>
+                      ⚠️ Os produtos selecionados não tiveram vendas registradas no período. Isso pode indicar itens parados em estoque (sem giro).
+                    </div>
+                  )
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px" }}>
                   {[

@@ -1,5 +1,4 @@
 "use client"
-import { useState } from "react"
 import { useSelecao, chaveItem } from "@/components/SelecaoContext"
 import { useRouter } from "next/navigation"
 
@@ -8,10 +7,11 @@ const LOJAS_NOMES: Record<string, string> = {
 }
 
 export default function CarrinhoPainel() {
-  const { itens, remover, limpar, total } = useSelecao()
-  const [aberto, setAberto] = useState(false)
+  const { itens, remover, limpar, total, painelAberto: aberto, setPainelAberto: setAberto } = useSelecao()
   const router = useRouter()
 
+  // Carrinho vazio: sem botao flutuante e sem painel. O contador da Sidebar
+  // continua visivel e diz que o modo e' panorama.
   if (total === 0) return null
 
   return (
@@ -62,7 +62,15 @@ export default function CarrinhoPainel() {
                           {LOJAS_NOMES[lj] || lj}: <b>{v}</b>
                         </span>
                       ))}
-                      {Object.values(lojas).every(v => v === 0) && <span style={{ fontSize: "10px", color: "var(--danger)" }}>Zerado em todas as lojas</span>}
+                      {/* Sem detalhe por loja (item marcado na Visao Geral, que so' traz o
+                          total da rede) o `every` de um objeto vazio da' true e o painel
+                          gritava "zerado" para item com estoque. Cai no total, e o
+                          Relatorio busca o saldo fresco por loja. */}
+                      {Object.keys(lojas).length === 0
+                        ? <span style={{ fontSize: "10px", color: it.totalRede === 0 ? "var(--danger)" : "var(--muted)" }}>
+                            {it.totalRede === 0 ? "Zerado na rede" : `Rede: ${it.totalRede ?? "—"}`}
+                          </span>
+                        : Object.values(lojas).every(v => v === 0) && <span style={{ fontSize: "10px", color: "var(--danger)" }}>Zerado em todas as lojas</span>}
                     </div>
                   </div>
                 )

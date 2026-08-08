@@ -1,8 +1,10 @@
 "use client"
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react"
+import { useRouter } from "next/navigation"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes, periodoParaParams} from "@/components/FiltroContext"
+import { useSelecao, chaveItem, ItemSelecionado } from "@/components/SelecaoContext"
 
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import AbaComGrafico from "@/components/AbaComGrafico"
@@ -46,6 +48,8 @@ const ABAS: { key: Aba, label: string }[] = [
 
 export default function VisaoGeralPage() {
   const { filtros, versaoBusca, periodo } = useFiltros()
+  const { itens, toggle, adicionarVarios, remover } = useSelecao()
+  const router = useRouter()
   const [aba, setAba] = useState<Aba>("produtos")
   const [granularidade, setGranularidade] = useState<"dia"|"mes"|"ano">("dia")
   const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, colecao?:string, marca?:string, titulo?:string}>({aberto:false})
@@ -195,7 +199,57 @@ export default function VisaoGeralPage() {
     { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
   ], [])
 
+  // ---- SELECAO (carrinho) na aba Produtos --------------------------------
+  // Cada linha da aba Produtos JA e' um SKU (cod_produto + cor + tamanho), mesma
+  // granularidade do carrinho — entao a linha vira um ItemSelecionado direto.
+  // Sem cod_produto nao da' para selecionar: o Relatorio recorta por cod_produto
+  // (ver focca-relatorio-estratificacao) e um item sem cod encheria o carrinho sem
+  // recortar nada, deixando a tela em "foco" e os numeros em panorama.
+  const itemDeLinha = useCallback((r: any): ItemSelecionado | null => {
+    if (r?.cod_produto == null || r.cod_produto === "") return null
+    return {
+      cod_produto: r.cod_produto,
+      produto: r.produto, cor: r.cor ?? "", tamanho: r.tamanho ?? "",
+      modelo: r.modelo, marca: r.marca, colecao: r.colecao,
+      // snapshot: `estoque_rede` daqui ja exclui o CD, igual ao resto das telas.
+      // Nao ha' saldo POR LOJA nesta consulta — o Relatorio busca o fresco em /produto/grade.
+      totalRede: Number(r.estoque_rede) || 0,
+    }
+  }, [])
+
+  // Set de chaves em vez de `temItem`: uma consulta O(1) por linha, e uma unica
+  // dependencia para os memos das colunas.
+  const chavesSel = useMemo(() => new Set(itens.map(it => chaveItem(it))), [itens])
+
+  // Linhas selecionaveis da lista atual (so a aba Produtos tem granularidade de SKU)
+  const selecionaveis = useMemo(
+    () => (aba === "produtos" ? lista.map(itemDeLinha).filter(Boolean) as ItemSelecionado[] : []),
+    [aba, lista, itemDeLinha]
+  )
+  const nSelNaLista = useMemo(
+    () => selecionaveis.reduce((n, it) => n + (chavesSel.has(chaveItem(it)) ? 1 : 0), 0),
+    [selecionaveis, chavesSel]
+  )
+  const todosDaListaMarcados = selecionaveis.length > 0 && nSelNaLista === selecionaveis.length
+
+  function alternarListaInteira() {
+    if (todosDaListaMarcados) selecionaveis.forEach(it => remover(chaveItem(it)))
+    else adicionarVarios(selecionaveis)
+  }
+
   const colsProdutos = useMemo(() => [
+    // Sem `sortBy` de proposito: ordenar por "marcado" faria a linha pular para o
+    // topo no instante do clique, e marcar varias seguidas vira caça ao rato.
+    // Quem quer ver o que marcou abre o painel do carrinho.
+    { key: "sel", label: "✓", align: "center" as const, render: (r: any) => {
+      const it = itemDeLinha(r)
+      if (!it) return <span title="Sem código de produto — não dá para analisar este item isolado" style={{ color: "var(--muted)" }}>—</span>
+      return (
+        <input type="checkbox" checked={chavesSel.has(chaveItem(it))} onChange={() => toggle(it)}
+          title="Marcar para analisar no Relatório"
+          style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} />
+      )
+    } },
     { key: "produto", label: "Produto", tdStyle: { fontWeight: 600, maxWidth: "260px" }, render: (r: any) => (
       <span title={r.produto} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <MiniFoto url={r.imagem} alt={r.produto} />
@@ -216,7 +270,7 @@ export default function VisaoGeralPage() {
         {Number(r.estoque_rede ?? 0).toLocaleString("pt-BR")}
       </span>
     ) },
-  ], [fmtR])
+  ], [fmtR, chavesSel, toggle, itemDeLinha])
 
   const colsLojas = useMemo(() => [
     { key: "nome_loja", label: "Loja", tdStyle: { fontWeight: 600 }, render: (r: any) => r.nome_loja?.replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
@@ -294,6 +348,52 @@ export default function VisaoGeralPage() {
           }}>{a.label}</button>
         ))}
       </div>
+
+      {/* BARRA DE SELECAO — so na aba Produtos, a unica com granularidade de SKU.
+          E o elo que faltava: descobrir aqui e aprofundar no Relatorio sem ter de
+          reencontrar o produto no Compras (nomes quase identicos sao indistinguiveis
+          por texto). Nao ha' export proprio aqui de proposito: o caminho de export
+          e' um so', o do Relatorio. */}
+      {aba === "produtos" && !loading && lista.length > 0 && (
+        <div style={{
+          background: itens.length ? "var(--primary-light)" : "var(--surface)",
+          border: `1px solid ${itens.length ? "var(--primary)" : "var(--border)"}`,
+          borderRadius: "10px", padding: "10px 14px", marginBottom: "12px",
+          display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap",
+        }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text)", cursor: "pointer" }}>
+            <input type="checkbox" checked={todosDaListaMarcados} onChange={alternarListaInteira}
+              style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} />
+            {todosDaListaMarcados ? "Desmarcar" : "Marcar"} os {selecionaveis.length} SKUs desta lista
+          </label>
+
+          <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+            {nSelNaLista} marcado{nSelNaLista === 1 ? "" : "s"} aqui
+            {itens.length > nSelNaLista && ` · ${itens.length} no carrinho ao todo`}
+          </span>
+
+          <div style={{ flex: 1 }} />
+
+          {itens.length > 0 && (
+            <button onClick={() => router.push("/compras")} style={{
+              padding: "8px 12px", background: "none", border: "1px solid var(--border)",
+              borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px",
+            }}>Ver no Compras</button>
+          )}
+
+          {/* Os filtros globais ja' viajam pelo FiltroContext (persistido em
+              localStorage), entao o Relatorio abre com o mesmo recorte — o botao
+              so' precisa navegar. */}
+          <button onClick={() => router.push("/relatorio")} style={{
+            padding: "8px 16px", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 700,
+            border: itens.length ? "none" : "1px solid var(--border)",
+            background: itens.length ? "var(--primary)" : "var(--surface2)",
+            color: itens.length ? "#fff" : "var(--text)",
+          }}>
+            {itens.length ? `Ver relatório destes (${itens.length}) →` : "Ver relatório deste recorte →"}
+          </button>
+        </div>
+      )}
 
       {/* Conteudo da aba */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>

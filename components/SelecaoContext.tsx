@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useContext, useState, ReactNode, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react"
 
 // Um item do carrinho = um SKU (produto + cor + tamanho)
 export type ItemSelecionado = {
@@ -29,12 +29,17 @@ type SelecaoContextType = {
   temItem: (chave: string) => boolean
   limpar: () => void
   total: number
+  // O painel do carrinho vive no AppShell, mas quem abre pode ser a Sidebar (que
+  // esta' em todas as telas) — por isso o estado de aberto/fechado mora aqui.
+  painelAberto: boolean
+  setPainelAberto: (v: boolean) => void
 }
 
 const SelecaoContext = createContext<SelecaoContextType | null>(null)
 
 export function SelecaoProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<ItemSelecionado[]>([])
+  const [painelAberto, setPainelAberto] = useState(false)
 
   const adicionar = useCallback((it: ItemSelecionado) => {
     setItens(prev => {
@@ -74,8 +79,12 @@ export function SelecaoProvider({ children }: { children: ReactNode }) {
   const temItem = useCallback((chave: string) => itens.some(p => chaveItem(p) === chave), [itens])
   const limpar = useCallback(() => setItens([]), [])
 
+  // Esvaziou (pelo botao Limpar ou removendo um a um): o painel desmonta, mas o
+  // estado ficaria "aberto" e ele reapareceria sozinho no proximo item marcado.
+  useEffect(() => { if (itens.length === 0) setPainelAberto(false) }, [itens.length])
+
   return (
-    <SelecaoContext.Provider value={{ itens, adicionar, adicionarVarios, remover, toggle, temItem, limpar, total: itens.length }}>
+    <SelecaoContext.Provider value={{ itens, adicionar, adicionarVarios, remover, toggle, temItem, limpar, total: itens.length, painelAberto, setPainelAberto }}>
       {children}
     </SelecaoContext.Provider>
   )
