@@ -1,5 +1,6 @@
 "use client"
-import React, { CSSProperties } from "react"
+import React, { CSSProperties, useRef } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { useSort, seta } from "@/lib/useSort"
 
 // Tabela <table> com cabecalho clicavel (ordenacao estilo Looker Studio).
@@ -23,6 +24,11 @@ type Props = {
   zebra?: boolean
   thStyle?: CSSProperties
   tdStyle?: CSSProperties
+  // Altura (px) do container rolavel. Definir LIGA a virtualizacao: so as linhas
+  // visiveis vao para o DOM. Opt-in porque as outras 5 telas que usam esta tabela
+  // mostram dezenas de linhas e nao precisam — e virtualizar tem custo proprio.
+  altura?: number
+  alturaLinha?: number
 }
 
 const TH: CSSProperties = {
@@ -34,6 +40,7 @@ const TD: CSSProperties = { padding: "9px 12px", whiteSpace: "nowrap" }
 
 function TabelaOrdenavel({
   colunas, linhas, initialKey = null, initialDir = "desc", zebra = true, thStyle, tdStyle,
+  altura, alturaLinha = 41,
 }: Props) {
   const accessors = React.useMemo(() => {
     const a: Record<string, (r: any) => any> = {}
@@ -43,33 +50,78 @@ function TabelaOrdenavel({
 
   const { sorted, sortKey, sortDir, toggle } = useSort(linhas, initialKey, initialDir, accessors)
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virt = useVirtualizer({
+    count: altura ? sorted.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => alturaLinha,
+    overscan: 12,
+  })
+
+  const cabecalho = (
+    <thead style={altura ? { position: "sticky", top: 0, zIndex: 1 } : undefined}>
+      <tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
+        {colunas.map(c => (
+          <th key={c.key}
+            onClick={() => toggle(c.key)}
+            title="Clique para ordenar"
+            style={{ ...TH, textAlign: c.align || "left", ...thStyle,
+                     background: "var(--surface2)",
+                     color: sortKey === c.key ? "var(--text)" : "var(--muted)" }}>
+            {c.label}{seta(sortKey === c.key, sortDir)}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  )
+
+  const celulas = (row: any, i: number) => colunas.map(c => (
+    <td key={c.key} style={{ ...TD, textAlign: c.align || "left", ...tdStyle, ...c.tdStyle }}>
+      {c.render ? c.render(row, i) : (row[c.key] ?? "—")}
+    </td>
+  ))
+
+  const fundo = (i: number) =>
+    zebra && i % 2 ? "color-mix(in srgb, var(--surface2) 45%, transparent)" : "transparent"
+
+  // --- caminho virtualizado -------------------------------------------------
+  // As linhas fora da janela viram DUAS <tr> vazias com altura equivalente
+  // (antes e depois). Mantem <table> de verdade — o alinhamento das colunas
+  // continua sendo do navegador, sem precisar fixar largura na mao.
+  if (altura) {
+    const itens = virt.getVirtualItems()
+    const antes = itens.length ? itens[0].start : 0
+    const depois = itens.length ? virt.getTotalSize() - itens[itens.length - 1].end : 0
+    return (
+      <div ref={scrollRef} style={{ height: `${altura}px`, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+          {cabecalho}
+          <tbody>
+            {antes > 0 && <tr style={{ height: `${antes}px` }} />}
+            {itens.map(vi => {
+              const row = sorted[vi.index]
+              return (
+                <tr key={vi.key} data-index={vi.index} ref={virt.measureElement}
+                  style={{ borderBottom: "1px solid var(--border)", background: fundo(vi.index) }}>
+                  {celulas(row, vi.index)}
+                </tr>
+              )
+            })}
+            {depois > 0 && <tr style={{ height: `${depois}px` }} />}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   return (
     <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-        <thead>
-          <tr style={{ background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
-            {colunas.map(c => (
-              <th key={c.key}
-                onClick={() => toggle(c.key)}
-                title="Clique para ordenar"
-                style={{ ...TH, textAlign: c.align || "left", ...thStyle,
-                         color: sortKey === c.key ? "var(--text)" : "var(--muted)" }}>
-                {c.label}{seta(sortKey === c.key, sortDir)}
-              </th>
-            ))}
-          </tr>
-        </thead>
+        {cabecalho}
         <tbody>
           {sorted.map((row, i) => (
-            <tr key={i} style={{
-              borderBottom: "1px solid var(--border)",
-              background: zebra && i % 2 ? "color-mix(in srgb, var(--surface2) 45%, transparent)" : "transparent",
-            }}>
-              {colunas.map(c => (
-                <td key={c.key} style={{ ...TD, textAlign: c.align || "left", ...tdStyle, ...c.tdStyle }}>
-                  {c.render ? c.render(row, i) : (row[c.key] ?? "—")}
-                </td>
-              ))}
+            <tr key={i} style={{ borderBottom: "1px solid var(--border)", background: fundo(i) }}>
+              {celulas(row, i)}
             </tr>
           ))}
         </tbody>

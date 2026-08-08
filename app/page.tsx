@@ -37,17 +37,22 @@ const GraficoReceita = memo(function GraficoReceita({ dados, granularidade }: { 
   )
 })
 
+// Modelos vem logo depois de Produtos: sao as duas abas de onde se seleciona.
 const ABAS: { key: Aba, label: string }[] = [
   { key: "produtos",   label: "Produtos" },
+  { key: "modelos",    label: "Modelos" },
   { key: "tamanhos",   label: "Tamanhos" },
   { key: "colecoes",   label: "Coleções" },
   { key: "marcas",     label: "Marcas" },
-  { key: "modelos",    label: "Modelos" },
   { key: "lojas",      label: "Lojas" },
 ]
 
+// Teto de linhas pedidas ao backend. Antes eram 50 fixos e o resto do recorte
+// ficava invisivel — sem aviso de que havia mais.
+const LIMITE_LINHAS = 25000
+
 export default function VisaoGeralPage() {
-  const { filtros, versaoBusca, periodo } = useFiltros()
+  const { filtros, setFiltros, versaoBusca, periodo, dispararBusca } = useFiltros()
   const { itens, toggle, adicionarVarios, remover } = useSelecao()
   const router = useRouter()
   const [aba, setAba] = useState<Aba>("produtos")
@@ -96,10 +101,14 @@ export default function VisaoGeralPage() {
     setLoading(true); setBuscaFeita(true)
     const p = montarParams()
     try {
+      // A aba Produtos pede o recorte INTEIRO (so ela e' por SKU e estoura os 50
+      // antigos). As outras agregam e ja vinham completas.
+      const pl = new URLSearchParams(p)
+      if (aba === "produtos") pl.set("limite", String(LIMITE_LINHAS))
       const [k, r, l] = await Promise.all([
         fetch(`${API_URL}/vendas/kpis?${p}`, { signal: sig }).then(r => r.json()),
         fetch(`${API_URL}/vendas/receita?${p}`, { signal: sig }).then(r => r.json()),
-        fetch(`${API_URL}/vendas/${aba}?${p}`, { signal: sig }).then(r => r.json()),
+        fetch(`${API_URL}/vendas/${aba}?${pl}`, { signal: sig }).then(r => r.json()),
       ])
       setKpis(k || {}); setReceita(Array.isArray(r) ? r : []); setLista(Array.isArray(l) ? l : [])
     } catch(e: any) { if (e?.name !== "AbortError") console.error(e) }
@@ -192,12 +201,85 @@ export default function VisaoGeralPage() {
     { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
   ], [])
 
+  // ---- SELECAO POR MODELO --------------------------------------------------
+  // Duas portas na mesma linha: o checkbox leva o modelo INTEIRO para o carrinho,
+  // o nome abre os SKUs dele na aba Produtos para escolher a dedo.
+  //
+  // Os SKUs saem de /produtos/skus (CATALOGO) e nao das vendas: marcar um modelo
+  // para repor tem de alcancar o tamanho que zerou, e o zerado nao vendeu — nem
+  // aparece no cache de estoque (o Microvix apaga a linha de inventario).
+  // Os filtros globais vao junto, senao "CAMISETA" traria 5 mil SKUs de coleções
+  // antigas em vez do recorte que esta' na tela.
+  const [carregandoModelo, setCarregandoModelo] = useState<string | null>(null)
+  const [modelosMarcados, setModelosMarcados] = useState<Record<string, string[]>>({})
+
+  async function alternarModelo(modelo: string) {
+    const jaMarcado = modelosMarcados[modelo]
+    if (jaMarcado) {
+      jaMarcado.forEach(k => remover(k))
+      setModelosMarcados(prev => { const n = { ...prev }; delete n[modelo]; return n })
+      return
+    }
+    setCarregandoModelo(modelo)
+    try {
+      const q = new URLSearchParams({ modelo })
+      if (filtros.marcas.length)  q.set("marca", filtros.marcas.join(","))
+      if (filtros.sexos.length)   q.set("sexo",  filtros.sexos.join(","))
+      if (filtros.cores.length)   q.set("cor",   filtros.cores.join(","))
+      if (filtros.lojas.length)   q.set("loja",  filtros.lojas.join(","))
+      if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
+      else if (filtros.anos.length) q.set("ano", filtros.anos.join(","))
+
+      const skus: any[] = await fetch(`${API_URL}/produtos/skus?${q}`).then(r => r.json())
+      if (!Array.isArray(skus) || skus.length === 0) {
+        alert(`Nenhum SKU de "${modelo}" no recorte atual.`); return
+      }
+      const zerados = skus.filter(s => Number(s.total_rede || 0) === 0).length
+      if (skus.length > 200 && !confirm(
+        `"${modelo}" tem ${skus.length.toLocaleString("pt-BR")} SKUs no recorte atual ` +
+        `(${zerados.toLocaleString("pt-BR")} sem estoque).\n\n` +
+        `Marcar todos? Para um recorte menor, feche isto e filtre por ano ou coleção antes.`
+      )) return
+
+      const itensNovos: ItemSelecionado[] = skus.map(s => ({
+        cod_produto: s.cod_produto, produto: s.produto, cor: s.cor ?? "", tamanho: s.tamanho ?? "",
+        modelo: s.modelo, marca: s.marca, colecao: s.colecao, totalRede: Number(s.total_rede) || 0,
+      }))
+      adicionarVarios(itensNovos)
+      setModelosMarcados(prev => ({ ...prev, [modelo]: itensNovos.map(it => chaveItem(it)) }))
+    } catch (e) {
+      console.error(e); alert("Não consegui carregar os SKUs deste modelo.")
+    } finally { setCarregandoModelo(null) }
+  }
+
+  // Nome clicavel: joga o modelo no filtro global e leva para a aba Produtos.
+  function abrirModelo(modelo: string) {
+    setFiltros({ ...filtros, modelos: [modelo] })
+    setAba("produtos")
+    dispararBusca()
+  }
+
   const colsModelos = useMemo(() => [
-    { key: "modelo", label: "Modelo", bold: true },
+    { key: "sel", label: "✓", align: "center" as const, render: (r: any) => (
+      carregandoModelo === r.modelo
+        ? <span style={{ fontSize: "11px", color: "var(--muted)" }}>...</span>
+        : <input type="checkbox" checked={!!modelosMarcados[r.modelo]}
+            onChange={() => alternarModelo(r.modelo)}
+            title="Marcar todos os SKUs deste modelo (respeita os filtros ativos)"
+            style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--primary)" }} />
+    ) },
+    { key: "modelo", label: "Modelo", bold: true, render: (r: any) => (
+      <span onClick={() => abrirModelo(r.modelo)} title="Ver os produtos deste modelo"
+        style={{ cursor: "pointer", fontWeight: 600, textDecoration: "underline",
+                 textDecorationStyle: "dotted" as const, textUnderlineOffset: "3px" }}>
+        {r.modelo}
+      </span>
+    ) },
     { key: "qtd_vendida", label: "Qtd Vendida", tipo: "num" as const, align: "right" as const, bold: true },
     { key: "receita", label: "Receita", tipo: "moeda" as const, align: "right" as const, cor: "var(--primary)" },
     { key: "estoque_rede", label: "Estoque", tipo: "num" as const, align: "right" as const, bold: true, clicavel: true },
-  ], [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [carregandoModelo, modelosMarcados, filtros])
 
   // ---- SELECAO (carrinho) na aba Produtos --------------------------------
   // Cada linha da aba Produtos JA e' um SKU (cod_produto + cor + tamanho), mesma
@@ -434,7 +516,10 @@ export default function VisaoGeralPage() {
             colunas={colsModelos}
           />
         ) : aba === "produtos" ? (
-          <TabelaOrdenavel linhas={lista} initialKey="qtd_vendida" colunas={colsProdutos} />
+          // altura liga a virtualizacao: com o recorte inteiro sao ~20 mil linhas,
+          // e uma <table> comum com isso trava o navegador.
+          <TabelaOrdenavel linhas={lista} initialKey="qtd_vendida" colunas={colsProdutos}
+            altura={Math.min(680, Math.max(240, lista.length * 41 + 42))} />
         ) : (
           <TabelaOrdenavel linhas={lista} initialKey="receita_total" colunas={colsLojas} />
         )}
