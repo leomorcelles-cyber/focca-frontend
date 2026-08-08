@@ -1,5 +1,5 @@
 "use client"
-import { memo } from "react"
+import React, { memo } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts"
 import { useSort, seta } from "@/lib/useSort"
 
@@ -14,6 +14,10 @@ type Coluna = {
   bold?: boolean
   cor?: string
   clicavel?: boolean   // celula vira botao (ex: estoque -> abre o detalhe por loja)
+  // Conteudo proprio da celula (checkbox, link). Tem precedencia sobre tipo/clicavel.
+  // Faltava: as colunas chegam aqui como variavel, entao o TypeScript nao acusa
+  // propriedade a mais — um `render` passado por engano era ignorado em silencio.
+  render?: (row: any, i: number) => React.ReactNode
 }
 
 type Props = {
@@ -100,7 +104,7 @@ function AbaComGrafico({ lista, campoLabel, campoValor, colunas, fmtR, tituloGra
                     fontWeight: c.bold ? 700 : 400,
                     color: c.cor || "var(--text)",
                   }}>
-                    {c.clicavel && onClicar ? (
+                    {c.render ? c.render(row, i) : c.clicavel && onClicar ? (
                       <span
                         onClick={() => onClicar(row, c)}
                         title="Ver estoque por loja"

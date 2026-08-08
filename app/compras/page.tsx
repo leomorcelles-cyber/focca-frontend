@@ -166,7 +166,7 @@ function ModalDetalhe({ prod, lojasFiltradas, onClose }: { prod: any, lojasFiltr
     const lojas: Record<string, number> = {}
     LOJAS.forEach(l => { lojas[String(l.id)] = saldoReal(linha.lojas?.[String(l.id)]) })
     const totalRede = Object.values(lojas).reduce((s, v) => s + v, 0)
-    return { cod_produto: linha.cod_produto, produto: linha.produto, cor: linha.cor, tamanho: linha.tamanho, modelo: linha.modelo, marca: linha.marca, colecao: linha.colecao, lojas, totalRede }
+    return { cod_produto: linha.cod_produto, produto: linha.produto, cor: linha.cor, tamanho: linha.tamanho, modelo: linha.modelo, marca: linha.marca, colecao: linha.colecao, lojas, totalRede, imagem: linha.imagem ?? null }
   }
 
   const todosMarcados = gradeOrd.length > 0 && gradeOrd.every(l => temItem(chaveItem({ cod_produto: l.cod_produto, cor: l.cor, tamanho: l.tamanho })))
@@ -483,7 +483,7 @@ export default function ComprasPage() {
         LOJAS.forEach(x => { lojas[String(x.id)] = Number(l.lojas?.[String(x.id)]) || 0 })
         return {
           cod_produto: l.cod_produto, produto: l.produto, cor: l.cor, tamanho: l.tamanho,
-          modelo: l.modelo, marca: l.marca, colecao: l.colecao, lojas,
+          modelo: l.modelo, marca: l.marca, colecao: l.colecao, lojas, imagem: l.imagem ?? null,
           totalRede: Object.values(lojas).reduce((s: number, v: number) => s + v, 0),
         }
       })

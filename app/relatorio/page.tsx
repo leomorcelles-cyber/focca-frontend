@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes, periodoParaParams } from "@/components/FiltroContext"
-import { useSelecao } from "@/components/SelecaoContext"
+import { useSelecao, chaveTransf } from "@/components/SelecaoContext"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import MiniFoto from "@/components/MiniFoto"
@@ -33,7 +33,7 @@ export default function RelatorioPage() {
   const rotuloPeriodo = periodo.tipo === "custom" && periodo.inicio && periodo.fim
     ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
     : `últimos ${periodo.dias} dias`
-  const { itens, limpar: limparSelecao } = useSelecao()
+  const { itens, limpar: limparSelecao, transferencias, limparTransf } = useSelecao()
   const [secoesSel, setSecoesSel] = useState<string[]>(["estoque", "vendas", "topprodutos", "tamanhos"])
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
   const [dados, setDados] = useState<any>(null)
@@ -263,30 +263,56 @@ export default function RelatorioPage() {
   // resumo executivo + matriz de estoque por loja com coluna de SUGESTAO DE
   // TRANSFERENCIA por giro + aba de transferencias detalhadas. Respeita os
   // filtros globais. Se ha itens no carrinho, foca nos produtos selecionados.
-  function exportExcel() {
+  // POST e nao GET com window.open: a seleção pode ter milhares de cod_produto
+  // (marcar um modelo inteiro na Visão Geral traz +1.300 SKUs), e isso passa de
+  // 12 mil caracteres de querystring — a requisição morre antes de chegar ao
+  // backend. No corpo não há esse teto, e as transferências marcadas cabem junto.
+  const [baixandoExcel, setBaixandoExcel] = useState(false)
+  async function exportExcel() {
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
-    const p = new URLSearchParams(paramsPeriodo)  // periodo do calendario (inicio/fim ou dias)
-    if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
-    if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
-    if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
-    if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
-    if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
-    if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
-    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
-    else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
-    if (filtros.saldoMax !== null) p.set("saldo_max", String(filtros.saldoMax))
+    const corpo: any = { ...paramsPeriodo }
+    if (filtros.lojas.length)    corpo.loja   = filtros.lojas.join(",")
+    if (filtros.marcas.length)   corpo.marca  = filtros.marcas.join(",")
+    if (filtros.modelos.length)  corpo.modelo = filtros.modelos.join(",")
+    if (filtros.sexos.length)    corpo.sexo   = filtros.sexos.join(",")
+    if (filtros.cores.length)    corpo.cor    = filtros.cores.join(",")
+    if (filtros.colecoes.length) corpo.colecao = filtros.colecoes.join(",")
+    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) corpo.colecao = colecoesAlvo.join(",")
+    else if (filtros.anos.length) corpo.ano = filtros.anos.join(",")
+    if (filtros.saldoMax !== null) corpo.saldo_max = filtros.saldoMax
 
     // Carrinho: manda os SKUs EXATOS selecionados (cod_produto de cada tamanho), para que
     // TODOS os tamanhos marcados apareçam no relatório — inclusive os zerados nas lojas.
     // Sem carrinho, cai no filtro global de produto/ID.
     if (codsCarrinho.length) {
-      p.set("cod_produto", codsCarrinho.join(","))
+      corpo.cod_produto = codsCarrinho.join(",")
     } else {
-      if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
-      if (filtros.ids.trim()) p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+      if (filtros.produtos.length) corpo.produto = filtros.produtos.join(",")
+      if (filtros.ids.trim()) corpo.cod_produto = filtros.ids.split(/[\s,;]+/).filter(Boolean).join(",")
     }
 
-    window.open(`${API_URL}/export/compras?${p}`)
+    // Transferências marcadas na tela de Transferências viram uma aba própria.
+    // Manda o OBJETO, nao so a chave: o backend recalcula as sugestoes sob o recorte
+    // do relatorio, que raramente e o mesmo da tela de Transferencias. Por chave, o
+    // que ficasse fora desse recorte sumia da aba — e o que foi marcado tem de sair.
+    if (transferencias.length) corpo.transferencias = transferencias
+
+    setBaixandoExcel(true)
+    try {
+      const res = await fetch(`${API_URL}/export/compras`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      })
+      if (!res.ok) { alert("Falha ao gerar o Excel."); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Relatorio_Compras_FOCCA_${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { alert("Erro de rede ao exportar.") }
+    finally { setBaixandoExcel(false) }
   }
 
   function exportPDF() { window.print() }
@@ -368,7 +394,9 @@ export default function RelatorioPage() {
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <SeletorPeriodo />
           <button onClick={exportPDF} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ PDF</button>
-          <button onClick={exportExcel} style={{ padding: "8px 14px", background: "var(--success)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ Excel</button>
+          <button onClick={exportExcel} disabled={baixandoExcel} style={{ padding: "8px 14px", background: "var(--success)", color: "#fff", border: "none", borderRadius: "8px", cursor: baixandoExcel ? "wait" : "pointer", fontSize: "13px", fontWeight: 600, opacity: baixandoExcel ? 0.7 : 1 }}>
+            {baixandoExcel ? "Gerando..." : "⬇ Excel"}{!baixandoExcel && transferencias.length ? ` (+${transferencias.length} transf.)` : ""}
+          </button>
           <button onClick={exportCSV} style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ CSV</button>
         </div>
       </div>
@@ -620,6 +648,54 @@ export default function RelatorioPage() {
                     { key: "perda_evitada", label: "Perda evitada", align: "right" as const, sortBy: (t: any) => Number(t.perda_evitada) || 0, tdStyle: { color: "var(--success)", fontWeight: 600 }, render: (t: any) => fmtR(t.perda_evitada) },
                   ]}
                 />
+              </div>
+            )}
+
+            {/* TRANSFERENCIAS MARCADAS — o que a pessoa DECIDIU, nao o que o giro
+                sugere. Vai como aba propria no Excel, ao lado das sugestoes, para
+                dar para ver o que ficou de fora. */}
+            {transferencias.length > 0 && (
+              <div style={{ ...card, borderColor: "var(--success)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+                  <div>
+                    <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "2px" }}>Transferências Selecionadas</h2>
+                    <p style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "12px" }}>
+                      {transferencias.length} escolhida{transferencias.length === 1 ? "" : "s"} na tela de Transferências ·
+                      {" "}{transferencias.reduce((s, t) => s + (Number(t.quantidade) || 0), 0)} peças ·
+                      {" "}sai como aba própria no Excel
+                    </p>
+                  </div>
+                  <button className="no-print" onClick={limparTransf} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}>
+                    Limpar
+                  </button>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead><tr>
+                      <th style={th}>Produto</th><th style={th}>Cor</th><th style={th}>Tam</th>
+                      <th style={th}>De</th><th style={th}>Para</th>
+                      <th style={{ ...th, textAlign: "center" }}>Qtd</th>
+                      <th style={{ ...th, textAlign: "center" }}>Urgência</th>
+                    </tr></thead>
+                    <tbody>
+                      {transferencias.map(t => (
+                        <tr key={chaveTransf(t)}>
+                          <td style={{ ...td, fontWeight: 600 }}>{t.produto}</td>
+                          <td style={{ ...td, color: "var(--muted)" }}>{t.cor}</td>
+                          <td style={{ ...td, fontWeight: 700 }}>{t.tamanho}</td>
+                          <td style={td}>{String(t.de_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
+                          <td style={td}>{String(t.para_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</td>
+                          <td style={{ ...td, textAlign: "center", fontWeight: 700, color: "var(--primary)" }}>{t.quantidade}</td>
+                          <td style={{ ...td, textAlign: "center" }}>
+                            <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "20px", fontWeight: 600,
+                              background: t.urgencia === "RUPTURA" ? "var(--danger-light)" : "var(--surface2)",
+                              color: t.urgencia === "RUPTURA" ? "var(--danger)" : "var(--muted)" }}>{t.urgencia}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

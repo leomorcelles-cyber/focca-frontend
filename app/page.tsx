@@ -244,6 +244,7 @@ export default function VisaoGeralPage() {
       const itensNovos: ItemSelecionado[] = skus.map(s => ({
         cod_produto: s.cod_produto, produto: s.produto, cor: s.cor ?? "", tamanho: s.tamanho ?? "",
         modelo: s.modelo, marca: s.marca, colecao: s.colecao, totalRede: Number(s.total_rede) || 0,
+        imagem: s.imagem ?? null,
       }))
       adicionarVarios(itensNovos)
       setModelosMarcados(prev => ({ ...prev, [modelo]: itensNovos.map(it => chaveItem(it)) }))
@@ -296,6 +297,7 @@ export default function VisaoGeralPage() {
       // snapshot: `estoque_rede` daqui ja exclui o CD, igual ao resto das telas.
       // Nao ha' saldo POR LOJA nesta consulta — o Relatorio busca o fresco em /produto/grade.
       totalRede: Number(r.estoque_rede) || 0,
+      imagem: r.imagem ?? null,
     }
   }, [])
 

@@ -1,5 +1,6 @@
 "use client"
 import { useSelecao, chaveItem } from "@/components/SelecaoContext"
+import MiniFoto from "@/components/MiniFoto"
 import { useRouter } from "next/navigation"
 
 const LOJAS_NOMES: Record<string, string> = {
@@ -50,6 +51,7 @@ export default function CarrinhoPainel() {
                 return (
                   <div key={k} style={{ background: "var(--surface2)", borderRadius: "8px", padding: "10px 12px", marginBottom: "8px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                      <MiniFoto url={it.imagem} tam={38} alt={it.produto} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.produto}</div>
                         <div style={{ fontSize: "11px", color: "var(--muted)" }}>{it.cor} · Tam {it.tamanho} {it.marca ? `· ${it.marca}` : ""}</div>
