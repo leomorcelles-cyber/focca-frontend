@@ -492,17 +492,6 @@ export default function ComprasPage() {
     finally { setCarregandoSel(null) }
   }
 
-  function exportar() {
-    const p = new URLSearchParams()
-    if (marcaSel !== "GERAL") p.set("marca", marcaSel)
-    else if (filtros.marcas.length === 1) p.set("marca", filtros.marcas[0])
-    if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
-    if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
-    if (filtros.colecoes.length === 1) p.set("colecao", filtros.colecoes[0])
-    if (filtros.lojas.length === 1)   p.set("loja",   String(filtros.lojas[0]))
-    window.open(`${API_URL}/export/matriz?${p}`)
-  }
-
   return (
     <div style={{ maxWidth: "100%", overflow: "hidden" }}>
       <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
@@ -546,7 +535,6 @@ export default function ComprasPage() {
             {itensSelecionados.length > 0 && (
               <button onClick={limpar} title="Esvazia a seleção de análise" style={{ padding: "8px 14px", background: "var(--surface2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>✕ Limpar seleção ({itensSelecionados.length})</button>
             )}
-            <button onClick={exportar} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }}>⬇ Exportar CSV</button>
           </div>
         )}
       </div>
