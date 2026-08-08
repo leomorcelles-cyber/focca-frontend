@@ -20,6 +20,7 @@ const SECOES = [
   { key: "topmarcas",   label: "Top Marcas" },
   { key: "tamanhos",    label: "Curva de Tamanhos" },
   { key: "lojas",  label: "Vendas por Loja" },
+  { key: "transferencias", label: "Transferências" },
 ]
 
 export default function RelatorioPage() {
@@ -517,6 +518,41 @@ export default function RelatorioPage() {
                     { key: "pecas", label: "Peças", align: "center", sortBy: (v: any) => Number(v.pecas) || 0, render: (v: any) => Number(v.pecas || 0) },
                     { key: "receita", label: "Receita", align: "right", sortBy: (v: any) => Number(v.receita) || 0, tdStyle: { color: "var(--primary)", fontWeight: 600 }, render: (v: any) => fmtR(v.receita) },
                     { key: "margem_media", label: "Margem", align: "right", sortBy: (v: any) => Number(v.margem_media) || 0, render: (v: any) => <span style={{ color: Number(v.margem_media) >= 0 ? "var(--success, #16a34a)" : "var(--danger)" }}>{Number(v.margem_media || 0).toFixed(1)}%</span> },
+                  ]}
+                />
+              </div>
+            )}
+
+            {secoesSel.includes("transferencias") && Array.isArray(s.transferencias) && s.transferencias.length > 0 && (
+              <div style={card}>
+                <h2 style={{ fontSize: "15px", fontWeight: 700, marginBottom: "2px" }}>Sugestões de Transferência</h2>
+                <p style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "12px" }}>
+                  Por giro dos últimos 90 dias (janela própria, não segue o calendário). Tira do CD primeiro.
+                  {s.transferencias_resumo?.perda_semanal_evitada > 0 && (
+                    <> · evita <strong style={{ color: "var(--success)" }}>{fmtR(s.transferencias_resumo.perda_semanal_evitada)}</strong> de perda semanal</>
+                  )}
+                </p>
+                <TabelaOrdenavel
+                  linhas={s.transferencias}
+                  initialKey="perda_evitada"
+                  colunas={[
+                    { key: "produto", label: "Produto", tdStyle: { fontWeight: 600 }, render: (t: any) => (
+                      <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <MiniFoto url={t.imagem} tam={26} alt={t.produto} />
+                        <span>{t.produto}</span>
+                      </span>
+                    ) },
+                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+                    { key: "tamanho", label: "Tam", align: "center" as const, tdStyle: { fontWeight: 700 } },
+                    { key: "de_loja", label: "De", render: (t: any) => <span style={{ color: t.de_eh_cd ? "var(--success)" : "var(--text)", fontWeight: t.de_eh_cd ? 700 : 400 }}>{String(t.de_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</span> },
+                    { key: "para_loja", label: "Para", render: (t: any) => String(t.para_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
+                    { key: "quantidade", label: "Qtd", align: "center" as const, sortBy: (t: any) => Number(t.quantidade) || 0, tdStyle: { fontWeight: 700, color: "var(--primary)" } },
+                    { key: "urgencia", label: "Urgência", align: "center" as const, render: (t: any) => (
+                      <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "20px", fontWeight: 600,
+                        background: t.urgencia === "RUPTURA" ? "var(--danger-light)" : "var(--surface2)",
+                        color: t.urgencia === "RUPTURA" ? "var(--danger)" : "var(--muted)" }}>{t.urgencia}</span>
+                    ) },
+                    { key: "perda_evitada", label: "Perda evitada", align: "right" as const, sortBy: (t: any) => Number(t.perda_evitada) || 0, tdStyle: { color: "var(--success)", fontWeight: 600 }, render: (t: any) => fmtR(t.perda_evitada) },
                   ]}
                 />
               </div>
