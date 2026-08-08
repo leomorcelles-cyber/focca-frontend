@@ -74,6 +74,16 @@ export default function ChatPage() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  // Recorte trazido do Relatorio pelo botao "Analisar com IA". Vem por
+  // sessionStorage porque o payload tem as secoes inteiras — nao cabe em URL.
+  const [contexto, setContexto] = useState<any>(null)
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("focca_contexto_ia")
+      if (raw) setContexto(JSON.parse(raw))
+    } catch {}
+  }, [])
   const fimRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs, loading])
@@ -89,7 +99,12 @@ export default function ChatPage() {
       const res = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensagens: novas.map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({
+          mensagens: novas.map(m => ({ role: m.role, content: m.content })),
+          // vai em TODA mensagem: o backend nao guarda estado entre chamadas,
+          // entao sem isso a IA esqueceria o recorte na segunda pergunta
+          ...(contexto ? { contexto } : {}),
+        }),
       })
       const json = await res.json()
       if (json.erro) {
@@ -110,6 +125,25 @@ export default function ChatPage() {
           Pergunte sobre estoque, vendas, giro e margem. A IA consulta o banco (somente leitura) e monta o relatório aqui.
         </p>
       </div>
+
+      {/* Recorte carregado do Relatorio. Fica visivel porque muda a resposta:
+          sem isso a pessoa nao saberia por que a IA fala de um recorte especifico. */}
+      {contexto && (
+        <div style={{ marginBottom: "12px", padding: "10px 14px", background: "var(--primary-light)", border: "1px solid var(--primary)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "12px", color: "var(--primary)", flex: 1, minWidth: "240px" }}>
+            ✦ <strong>Analisando o relatório</strong> — {contexto.periodo}
+            {contexto?.selecao?.total ? ` · seleção de ${contexto.selecao.total} SKUs` : " · panorama"}
+            {contexto?.transferencias?.length ? ` · ${contexto.transferencias.length} transferências marcadas` : ""}
+            {Object.keys(contexto?.filtros || {}).length
+              ? ` · filtros: ${Object.entries(contexto.filtros).map(([k, v]) => `${k} ${v}`).join("; ")}`
+              : " · sem filtros"}
+          </span>
+          <button onClick={() => { setContexto(null); try { sessionStorage.removeItem("focca_contexto_ia") } catch {} }}
+            style={{ padding: "5px 10px", background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "6px", color: "var(--primary)", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}>
+            Descartar recorte
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px" }}>
         {msgs.length === 0 && !loading && (

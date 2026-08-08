@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes, periodoParaParams } from "@/components/FiltroContext"
 import { useSelecao, chaveTransf } from "@/components/SelecaoContext"
@@ -25,6 +26,7 @@ const SECOES = [
 
 export default function RelatorioPage() {
   const { filtros, periodo, versaoBusca } = useFiltros()
+  const router = useRouter()
   // Periodo agora vem do CALENDARIO compartilhado (mesmo estado da Visao Geral,
   // persistido em localStorage). periodoParaParams devolve {inicio,fim} (custom)
   // ou {dias} (ultimos-N) para o backend.
@@ -317,6 +319,45 @@ export default function RelatorioPage() {
 
   function exportPDF() { window.print() }
 
+  // Manda o recorte da tela para o Chat IA. Via sessionStorage e nao querystring:
+  // o payload tem as seções inteiras e a lista de produtos da seleção, que não
+  // cabem numa URL — o mesmo teto que derrubava o export por window.open.
+  function analisarComIA() {
+    const f: Record<string, any> = {}
+    if (filtros.lojas.length)    f["lojas"]    = filtros.lojas.map(id => LOJAS_NOMES[String(id)] || id).join(", ")
+    if (filtros.marcas.length)   f["marcas"]   = filtros.marcas.join(", ")
+    if (filtros.modelos.length)  f["modelos"]  = filtros.modelos.join(", ")
+    if (filtros.sexos.length)    f["sexo"]     = filtros.sexos.join(", ")
+    if (filtros.anos.length)     f["ano da coleção"] = filtros.anos.join(", ")
+    if (filtros.colecoes.length) f["coleções"] = filtros.colecoes.join(", ")
+    if (filtros.cores.length)    f["cores"]    = filtros.cores.join(", ")
+    if (filtros.saldoMax !== null) f["saldo na rede"] = `<= ${filtros.saldoMax}`
+    // Produto/IDs só entram quando de fato valem — com carrinho eles são ignorados,
+    // e mandá-los daria à IA um recorte que não é o dos números acima.
+    if (!codsCarrinho.length) {
+      if (filtros.produtos.length) f["produtos"] = filtros.produtos.join(", ")
+      if (filtros.ids.trim())      f["IDs"] = filtros.ids
+    }
+
+    const contexto = {
+      periodo: rotuloPeriodo,
+      filtros: f,
+      selecao: {
+        total: codsCarrinho.length,
+        produtos: [...new Set(itens.map(it => it.produto))],
+      },
+      secoes: {
+        estoque: s.estoque && !s.estoque.erro ? s.estoque : null,
+        vendas: s.vendas && !s.vendas.erro ? s.vendas : null,
+        topprodutos: (s.topprodutos || []).slice(0, 15),
+        tamanhos: (s.tamanhos || []).slice(0, 20),
+      },
+      transferencias,
+    }
+    try { sessionStorage.setItem("focca_contexto_ia", JSON.stringify(contexto)) } catch {}
+    router.push("/chat?contexto=relatorio")
+  }
+
   function baixar(conteudo: string, nome: string, tipo: string) {
     const blob = new Blob(["\ufeff" + conteudo], { type: `${tipo};charset=utf-8` })
     const url = URL.createObjectURL(blob)
@@ -393,6 +434,10 @@ export default function RelatorioPage() {
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <SeletorPeriodo />
+          <button onClick={analisarComIA} disabled={loading || !dados} title="Leva este recorte e estes números para o Chat IA"
+            style={{ padding: "8px 14px", background: "var(--surface)", color: "var(--primary)", border: "1px solid var(--primary)", borderRadius: "8px", cursor: loading || !dados ? "not-allowed" : "pointer", fontSize: "13px", fontWeight: 700, opacity: loading || !dados ? 0.5 : 1 }}>
+            ✦ Analisar com IA
+          </button>
           <button onClick={exportPDF} style={{ padding: "8px 14px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>⬇ PDF</button>
           <button onClick={exportExcel} disabled={baixandoExcel} style={{ padding: "8px 14px", background: "var(--success)", color: "#fff", border: "none", borderRadius: "8px", cursor: baixandoExcel ? "wait" : "pointer", fontSize: "13px", fontWeight: 600, opacity: baixandoExcel ? 0.7 : 1 }}>
             {baixandoExcel ? "Gerando..." : "⬇ Excel"}{!baixandoExcel && transferencias.length ? ` (+${transferencias.length} transf.)` : ""}
