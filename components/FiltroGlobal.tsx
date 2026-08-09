@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useFiltros, FiltroState, filtroVazio } from "@/components/FiltroContext"
 import FiltrosSalvos from "@/components/FiltrosSalvos"
+import { useSelecao } from "@/components/SelecaoContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -15,6 +16,21 @@ export const LOJAS = [
   { id: 7, nome: "Hype",     key: "focca_hype" },
 ]
 export const SEXOS = ["FEMININO","MASCULINO","FEM INF","MASC INF","UNISSEX","FEMININO CURVES"]
+
+// Cabecalho de zona. O drawer tinha 11 campos numa lista plana, e a pessoa nao
+// tinha como saber que o "Ano" nao briga com o calendario. Agrupar por PERGUNTA
+// (quando / qual produto / onde e quanto) ensina o modelo pela estrutura, sem
+// depender de ninguem ler a legenda.
+function Zona({ titulo, ajuda }: { titulo: string, ajuda: string }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px", marginBottom: "-8px" }}>
+      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+        {titulo}
+      </div>
+      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>{ajuda}</div>
+    </div>
+  )
+}
 
 function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean, onClick: () => void, small?: boolean }) {
   return (
@@ -46,7 +62,8 @@ const inp = { padding: "7px 11px", borderRadius: "8px", border: "1px solid var(-
 type Props = { onBuscar: () => void, loading?: boolean, mostrarSaldo?: boolean }
 
 export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props) {
-  const { filtros, setFiltros, dispararBusca } = useFiltros()
+  const { filtros, setFiltros, dispararBusca, periodo } = useFiltros()
+  const { total: totalSelecao } = useSelecao()
 
   const [opModelos, setOpModelos] = useState<string[]>([])
   const [opMarcas,  setOpMarcas]  = useState<string[]>([])
@@ -390,13 +407,26 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
             </div>
 
             <div style={{ padding: "18px 20px", display: "grid", gridTemplateColumns: "1fr", gap: "22px", overflowY: "auto", flex: 1 }}>
-          {/* 1. LOJA */}
-          <div>
-            <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => up({ lojas: toggle(filtros.lojas, l.id) })} />)}
+
+          {/* ZONA 1 — QUANDO.
+              O calendario vive no cabecalho da pagina, nao aqui. Aparece como
+              leitura para a pessoa ver os TRES eixos num lugar so: era a confusao
+              de "escolhi a data no calendario mas filtrei o ano ali". */}
+          <Zona titulo="1 · Quando" ajuda="a janela de tempo da venda — muda no calendário, no topo da página" />
+          <div style={{
+            padding: "10px 12px", background: "var(--surface2)", borderRadius: "8px",
+            border: "1px dashed var(--border)", fontSize: "13px", color: "var(--text)",
+          }}>
+            {periodo.tipo === "custom" && periodo.inicio && periodo.fim
+              ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
+              : `Últimos ${periodo.dias} dias`}
+            <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
+              Não é afetado por nenhum filtro abaixo.
             </div>
           </div>
+
+          {/* ZONA 2 — QUAL PRODUTO: atributos do catalogo. */}
+          <Zona titulo="2 · Qual produto" ajuda="atributos do produto — nenhum deles mexe na data da venda" />
 
           {/* 2. ANO DA COLECAO — nao e' o ano da venda.
               Era so' "Ano" ao lado de um calendario, e a pessoa lia como se um
@@ -411,18 +441,6 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
               {anosVis.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
             </div>
           </div>
-
-          {/* 3. SALDO MAXIMO (min–max) */}
-          {mostrarSaldo && (
-            <div>
-              <label style={lbl}>Saldo máximo na rede {filtros.saldoMax !== null && <span style={{ color: "var(--primary)" }}>· ≤ {filtros.saldoMax}</span>}</label>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
-                {[0, 2, 5, 10, 20].map(v => <Chip key={v} label={v === 0 ? "Zerados" : `≤ ${v}`} small ativo={filtros.saldoMax === v} onClick={() => up({ saldoMax: filtros.saldoMax === v ? null : v })} />)}
-                {filtros.saldoMax !== null && <Chip label="✕" small ativo={false} onClick={() => up({ saldoMax: null })} />}
-              </div>
-              <input type="range" min={0} max={50} value={filtros.saldoMax ?? 50} onChange={e => up({ saldoMax: Number(e.target.value) })} style={{ width: "100%", accentColor: "var(--primary)" }} />
-            </div>
-          )}
 
           {/* 4. MARCA */}
           <div>
@@ -506,6 +524,48 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
               </div>
             )}
           </div>
+
+          {/* ZONA 3 — ONDE E QUANTO: nao sao atributos do produto, sao do ESTOQUE.
+              A loja recorta a venda E o saldo; o saldo maximo so' olha o estoque de
+              hoje, e e' o unico filtro que ignora SKU sem registro. Ficavam no meio
+              dos atributos e a assimetria virava surpresa. */}
+          <Zona titulo="3 · Onde e quanto" ajuda="filtros de estoque, não do produto" />
+          <div>
+            <label style={lbl}>Loja {filtros.lojas.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.lojas.length}</span>}</label>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => up({ lojas: toggle(filtros.lojas, l.id) })} />)}
+            </div>
+          </div>
+          {mostrarSaldo && (
+            <div>
+              <label style={lbl}>Saldo máximo na rede {filtros.saldoMax !== null && <span style={{ color: "var(--primary)" }}>· ≤ {filtros.saldoMax}</span>}</label>
+              <div style={{ fontSize: "10px", color: "var(--muted)", marginBottom: "6px", marginTop: "-2px" }}>
+                olha o estoque de hoje, não o período
+              </div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                {[0, 2, 5, 10, 20].map(v => <Chip key={v} label={v === 0 ? "Zerados" : `≤ ${v}`} small ativo={filtros.saldoMax === v} onClick={() => up({ saldoMax: filtros.saldoMax === v ? null : v })} />)}
+                {filtros.saldoMax !== null && <Chip label="✕" small ativo={false} onClick={() => up({ saldoMax: null })} />}
+              </div>
+              <input type="range" min={0} max={50} value={filtros.saldoMax ?? 50} onChange={e => up({ saldoMax: Number(e.target.value) })} style={{ width: "100%", accentColor: "var(--primary)" }} />
+            </div>
+          )}
+
+          {/* ZONA 4 — A SELECAO tambem recorta, e mora fora daqui (carrinho).
+              Sem esta linha ela era o unico eixo invisivel no drawer. */}
+          {totalSelecao > 0 && (
+            <>
+              <Zona titulo="4 · Seleção" ajuda="marcada nas telas — substitui o filtro de produto" />
+              <div style={{
+                padding: "10px 12px", background: "var(--primary-light)", borderRadius: "8px",
+                border: "1px solid var(--primary)", fontSize: "13px", color: "var(--primary)",
+              }}>
+                <strong>{totalSelecao.toLocaleString("pt-BR")} SKUs marcados</strong>
+                <div style={{ fontSize: "11px", marginTop: "2px", opacity: 0.85 }}>
+                  Enquanto houver seleção, ela manda sobre Produto e IDs. Os demais filtros continuam valendo.
+                </div>
+              </div>
+            </>
+          )}
             </div>
 
             <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", gap: "8px", flexShrink: 0, background: "var(--surface2)" }}>
