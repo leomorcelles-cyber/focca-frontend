@@ -340,7 +340,16 @@ export default function ComprasPage() {
     if (filtros.saldoMax !== null)    p.set("saldo_max", String(filtros.saldoMax))
 
     try {
-      const res = await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
+      // Seleção grande vai por POST: 1.038 cods dão 8.260 caracteres de URL, e
+      // com 5.000 passam de 40 KB — a requisição morre antes de chegar ao backend.
+      // Mesmo motivo que levou o export para POST. Abaixo do corte segue GET, que
+      // é cacheável e dá para abrir na mão ao depurar.
+      const urlLonga = p.toString().length > 3000
+      const res = urlLonga
+        ? await fetch(`${API_URL}/matriz`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(Object.fromEntries(p)), signal: abortRef.current.signal })
+        : await fetch(`${API_URL}/matriz?${p}`, { signal: abortRef.current.signal })
       let rows: any[] = await res.json()
       if (filtros.sexos.length > 1)   rows = rows.filter(r => filtros.sexos.some(s => r.sexo?.includes(s)))
       if (filtros.modelos.length > 1) rows = rows.filter(r => filtros.modelos.some(m => r.modelo?.includes(m)))
