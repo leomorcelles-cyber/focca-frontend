@@ -1,5 +1,7 @@
 "use client"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
+import { useFiltros, periodoParaParams } from "@/components/FiltroContext"
+import { useSelecao } from "@/components/SelecaoContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -76,14 +78,66 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   // Recorte trazido do Relatorio pelo botao "Analisar com IA". Vem por
   // sessionStorage porque o payload tem as secoes inteiras — nao cabe em URL.
-  const [contexto, setContexto] = useState<any>(null)
+  const [contextoSalvo, setContextoSalvo] = useState<any>(null)
+  const [descartado, setDescartado] = useState(false)
+  const { filtros, periodo } = useFiltros()
+  const { itens } = useSelecao()
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("focca_contexto_ia")
-      if (raw) setContexto(JSON.parse(raw))
+      if (raw) setContextoSalvo(JSON.parse(raw))
     } catch {}
   }, [])
+
+  // Quem entra no chat pela sidebar nao passa pelo botao do Relatorio e chegava aqui
+  // sem recorte nenhum — a IA respondia sobre a rede inteira enquanto os filtros
+  // globais (que valem em TODAS as telas e sobrevivem ao reload) diziam outra coisa.
+  // Este e' o mesmo recorte, montado do FiltroContext e do carrinho. Sem os numeros
+  // ja calculados do Relatorio, porque aqui eles nao existem.
+  const contextoVivo = useMemo(() => {
+    const cods = [...new Set(itens.map(it => String(it.cod_produto))
+      .filter(v => v && v !== "undefined" && v !== "null"))]
+    const f: Record<string, any> = {}
+    if (filtros.lojas.length)    f["lojas"]    = filtros.lojas.join(", ")
+    if (filtros.marcas.length)   f["marcas"]   = filtros.marcas.join(", ")
+    if (filtros.modelos.length)  f["modelos"]  = filtros.modelos.join(", ")
+    if (filtros.sexos.length)    f["sexo"]     = filtros.sexos.join(", ")
+    if (filtros.anos.length)     f["ano da coleção"] = filtros.anos.join(", ")
+    if (filtros.colecoes.length) f["coleções"] = filtros.colecoes.join(", ")
+    if (filtros.cores.length)    f["cores"]    = filtros.cores.join(", ")
+    if (!cods.length) {
+      if (filtros.produtos.length) f["produtos"] = filtros.produtos.join(", ")
+      if (filtros.ids.trim())      f["IDs"] = filtros.ids
+    }
+    // Nada filtrado e carrinho vazio: e' panorama mesmo, nao ha recorte a mandar.
+    if (!Object.keys(f).length && !cods.length) return null
+
+    const TETO_CODS = 600
+    const recorte: Record<string, any> = {
+      ...periodoParaParams(periodo),
+      marcas: filtros.marcas, modelos: filtros.modelos, sexos: filtros.sexos,
+      anos: filtros.anos, colecoes: filtros.colecoes, cores: filtros.cores,
+      lojas: filtros.lojas,
+    }
+    if (cods.length) {
+      recorte.cods = cods.slice(0, TETO_CODS).map(Number)
+      if (cods.length > TETO_CODS) recorte.cods_truncados = true
+    } else {
+      if (filtros.produtos.length) recorte.produtos = filtros.produtos
+      if (filtros.ids.trim()) recorte.cods = filtros.ids.split(/[\s,;]+/).filter(Boolean).map(Number)
+    }
+    const rotulo = periodo.tipo === "custom" && periodo.inicio && periodo.fim
+      ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
+      : `últimos ${periodo.dias} dias`
+    return {
+      periodo: rotulo, filtros: f, recorte, origem: "filtros",
+      selecao: { total: cods.length, produtos: [...new Set(itens.map(it => it.produto))] },
+    }
+  }, [filtros, periodo, itens])
+
+  // O do Relatorio ganha: traz os numeros ja calculados, que o vivo nao tem.
+  const contexto = descartado ? null : (contextoSalvo ?? contextoVivo)
   const fimRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs, loading])
@@ -106,12 +160,51 @@ export default function ChatPage() {
           ...(contexto ? { contexto } : {}),
         }),
       })
-      const json = await res.json()
-      if (json.erro) {
-        setMsgs([...novas, { role: "assistant", content: `⚠️ ${json.erro}` }])
-      } else {
-        setMsgs([...novas, { role: "assistant", content: json.resposta || "(sem resposta)", consultas: json.consultas }])
+      // Resposta em JSON, não em stream. Dois casos caem aqui:
+      //  - erro de configuração (sem ANTHROPIC_API_KEY), que o backend responde antes
+      //    de abrir o stream;
+      //  - backend ainda na versão anterior. Backend e frontend têm deploys
+      //    separados, então existe uma janela em que um subiu e o outro não — sem
+      //    este caminho, o chat ficaria quebrado nessa janela.
+      if (!res.body || !(res.headers.get("content-type") || "").includes("event-stream")) {
+        const json = await res.json().catch(() => ({ erro: "Resposta inesperada da IA." }))
+        setMsgs([...novas, json.erro
+          ? { role: "assistant", content: `⚠️ ${json.erro}` }
+          : { role: "assistant", content: json.resposta || "(sem resposta)", consultas: json.consultas }])
+        return
       }
+
+      // A resposta chega em pedaços (SSE). Cada delta é anexado à mesma mensagem,
+      // então o texto aparece sendo escrito em vez de surgir pronto no fim.
+      let resposta = ""
+      let consultas: any[] = []
+      const pintar = () => setMsgs([...novas, { role: "assistant", content: resposta, consultas }])
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        // Um evento pode chegar partido entre chunks: só processa os completos e
+        // guarda o resto no buffer.
+        const partes = buf.split("\n\n")
+        buf = partes.pop() ?? ""
+        for (const p of partes) {
+          const linha = p.split("\n").find(l => l.startsWith("data: "))
+          if (!linha) continue
+          let ev: any
+          try { ev = JSON.parse(linha.slice(6)) } catch { continue }
+          if (ev.tipo === "texto") { resposta += ev.delta; pintar() }
+          else if (ev.tipo === "consulta") { consultas = [...consultas, ev]; pintar() }
+          else if (ev.tipo === "erro") {
+            consultas = ev.consultas || consultas
+            resposta += `${resposta ? "\n\n" : ""}⚠️ ${ev.erro}`
+            pintar()
+          }
+        }
+      }
+      if (!resposta) setMsgs([...novas, { role: "assistant", content: "(sem resposta)", consultas }])
     } catch {
       setMsgs([...novas, { role: "assistant", content: "⚠️ Erro de rede ao falar com a IA." }])
     } finally { setLoading(false) }
@@ -131,14 +224,14 @@ export default function ChatPage() {
       {contexto && (
         <div style={{ marginBottom: "12px", padding: "10px 14px", background: "var(--primary-light)", border: "1px solid var(--primary)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "12px", color: "var(--primary)", flex: 1, minWidth: "240px" }}>
-            ✦ <strong>Analisando o relatório</strong> — {contexto.periodo}
+            ✦ <strong>{contexto.origem === "filtros" ? "Recorte dos filtros ativos" : "Analisando o relatório"}</strong> — {contexto.periodo}
             {contexto?.selecao?.total ? ` · seleção de ${contexto.selecao.total} SKUs` : " · panorama"}
             {contexto?.transferencias?.length ? ` · ${contexto.transferencias.length} transferências marcadas` : ""}
             {Object.keys(contexto?.filtros || {}).length
               ? ` · filtros: ${Object.entries(contexto.filtros).map(([k, v]) => `${k} ${v}`).join("; ")}`
               : " · sem filtros"}
           </span>
-          <button onClick={() => { setContexto(null); try { sessionStorage.removeItem("focca_contexto_ia") } catch {} }}
+          <button onClick={() => { setContextoSalvo(null); setDescartado(true); try { sessionStorage.removeItem("focca_contexto_ia") } catch {} }}
             style={{ padding: "5px 10px", background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "6px", color: "var(--primary)", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}>
             Descartar recorte
           </button>
@@ -180,7 +273,9 @@ export default function ChatPage() {
           </div>
         ))}
 
-        {loading && (
+        {/* Só até o primeiro pedaço chegar — dali em diante o próprio texto sendo
+            escrito já é o sinal de que está viva, e o aviso viraria ruído. */}
+        {loading && !(msgs[msgs.length - 1]?.role === "assistant" && msgs[msgs.length - 1]?.content) && (
           <div style={{ color: "var(--muted)", fontSize: "13px", padding: "4px 0" }}>Consultando o banco e analisando…</div>
         )}
         <div ref={fimRef} />

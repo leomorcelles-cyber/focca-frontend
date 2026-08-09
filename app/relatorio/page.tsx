@@ -341,9 +341,30 @@ export default function RelatorioPage() {
       if (filtros.ids.trim())      f["IDs"] = filtros.ids
     }
 
+    // Além dos rótulos legíveis acima, vai o recorte em valores CRUS. Sem isso a IA
+    // sabia que existia um filtro mas não tinha como aplicá-lo: escrevia SQL da rede
+    // inteira e respondia um número que não era o da tela. O backend traduz isto num
+    // WHERE usando o mesmo tradutor dos endpoints (_where_multi), então o recorte
+    // dela não pode divergir do recorte daqui.
+    const TETO_CODS = 600
+    const recorte: Record<string, any> = {
+      ...periodoParaParams(periodo),   // {inicio,fim} ou {dias}
+      marcas: filtros.marcas, modelos: filtros.modelos, sexos: filtros.sexos,
+      anos: filtros.anos, colecoes: filtros.colecoes, cores: filtros.cores,
+      lojas: filtros.lojas,
+    }
+    if (codsCarrinho.length) {
+      recorte.cods = codsCarrinho.slice(0, TETO_CODS).map(Number)
+      if (codsCarrinho.length > TETO_CODS) recorte.cods_truncados = true
+    } else {
+      if (filtros.produtos.length) recorte.produtos = filtros.produtos
+      if (filtros.ids.trim()) recorte.cods = filtros.ids.split(/[\s,;]+/).filter(Boolean).map(Number)
+    }
+
     const contexto = {
       periodo: rotuloPeriodo,
       filtros: f,
+      recorte,
       selecao: {
         total: codsCarrinho.length,
         produtos: [...new Set(itens.map(it => it.produto))],
