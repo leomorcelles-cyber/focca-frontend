@@ -62,6 +62,13 @@ export default function VisaoGeralPage() {
   const [modalEstoque, setModalEstoque] = useState<{aberto:boolean, cod?:number, modelo?:string, colecao?:string, marca?:string, titulo?:string}>({aberto:false})
   const [opPorAno, setOpPorAno] = useState<Record<string,string[]>>({})
 
+  // Cods do carrinho — mesma derivacao do Relatorio, para os dois recortarem igual.
+  // Declarado aqui em cima porque montarParams() e o efeito de busca dependem dele.
+  const codsCarrinho = useMemo(
+    () => [...new Set(itens.map(it => String(it.cod_produto)).filter(v => v && v !== "undefined" && v !== "null"))],
+    [itens]
+  )
+
   const [kpis, setKpis] = useState<any>({})
   const [receita, setReceita] = useState<any[]>([])
   const [lista, setLista] = useState<any[]>([])  // dados da aba ativa
@@ -81,9 +88,18 @@ export default function VisaoGeralPage() {
     if (filtros.modelos.length) p.set("modelo",  filtros.modelos.join(","))
     if (filtros.sexos.length)   p.set("sexo",    filtros.sexos.join(","))
     if (filtros.anos.length)    p.set("ano",     filtros.anos.join(","))
-    if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
     if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
-    if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+
+    // CARRINHO manda sobre Produto/IDs — a MESMA regra do Relatório e do Compras.
+    // Faltava aqui: esta é a tela onde a seleção é feita, e era a única que
+    // continuava mostrando o panorama do filtro depois de marcar. Os KPIs, o
+    // gráfico de receita e todas as abas ficavam divergindo do Relatório.
+    if (codsCarrinho.length) {
+      p.set("cod_produto", codsCarrinho.join(","))
+    } else {
+      if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
+      if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+    }
 
     // Colecao: usa selecao explicita, ou resolve a partir de ano/estacao.
     // estacao SOZINHA tambem resolve (antes exigia ano junto, e marcar so'
@@ -123,8 +139,9 @@ export default function VisaoGeralPage() {
     }
   }
 
-  // Busca ao entrar com filtros, ao mudar dias, ou ao trocar de aba
-  useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, periodo, aba])
+  // Busca ao entrar com filtros, ao mudar dias, ao trocar de aba — e ao mexer no
+  // CARRINHO, porque ele agora recorta os numeros desta tela tambem.
+  useEffect(() => { buscar() /* eslint-disable-next-line */ }, [versaoBusca, periodo, aba, codsCarrinho.length])
 
   const receitaDia = useMemo(() => {
     // chave de agrupamento conforme granularidade: dia(YYYY-MM-DD), mes(YYYY-MM), ano(YYYY)
