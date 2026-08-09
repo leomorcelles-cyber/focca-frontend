@@ -89,29 +89,52 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
   }, [])
 
-  // Opcoes EM CASCATA: rebusca /filtros com os filtros ativos (debounce 250ms).
-  // Cada selecao restringe as opcoes das DEMAIS dimensoes (sexo, anos e colecoes
-  // inclusos) — evita combinacoes que retornariam vazio.
+  // Opcoes EM CASCATA (debounce 250ms).
+  //
+  // REGRA: as opcoes de cada dimensao saem de todos os filtros MENOS o DELA.
+  //
+  // Antes era UMA consulta com todos os filtros, e o resultado alimentava todas as
+  // dimensoes. O efeito relatado: marcar sexo=FEMININO fazia a lista de sexo
+  // passar a conter so' FEMININO (ela se filtrava a si mesma); depois, ao marcar
+  // uma colecao, a intersecao mudava e MASCULINO reaparecia. A lista crescia
+  // quando deveria encolher.
+  //
+  // Excluindo a propria dimensao, a lista dela para de se mexer ao ser usada: as
+  // opcoes de sexo respondem "quais sexos existem no resto do recorte", que e' a
+  // pergunta util — da' para trocar FEMININO por MASCULINO sem limpar nada.
+  // Sao 6 consultas em paralelo em vez de 1, atras do mesmo debounce.
   const cascataTimer = useRef<any>(null)
   useEffect(() => {
     if (cascataTimer.current) clearTimeout(cascataTimer.current)
     cascataTimer.current = setTimeout(() => {
-      const q = new URLSearchParams()
-      if (filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
-      if (filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
-      if (filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
-      if (filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
-      if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
-      if (filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
-      if (filtros.produtos.length) q.set("produto", filtros.produtos.join(","))
-      if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
-      if (filtros.ids.trim())      q.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
-      fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).then(f => {
-        setOpModelos(f.modelos || []); setOpMarcas(f.marcas || []); setOpCores(f.cores || [])
-        setOpSexos(f.sexos?.length ? f.sexos : (SEXOS as unknown as string[]))
-        setCascAnos(Array.isArray(f.anos) ? f.anos.map(String) : null)
-        setCascColecoes(Array.isArray(f.colecoes) ? f.colecoes : null)
-      }).catch(() => {})
+      const parte = (exceto: string) => {
+        const q = new URLSearchParams()
+        if (exceto !== "marca"   && filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
+        if (exceto !== "modelo"  && filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
+        if (exceto !== "sexo"    && filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
+        if (exceto !== "cor"     && filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
+        // colecao e ano sao a MESMA dimensao vista de dois jeitos: o ano resolve
+        // para uma lista de colecoes. Um tem de excluir o outro, senao voltam a se
+        // filtrar mutuamente e o problema reaparece com outra roupa.
+        const dimColecao = exceto === "colecao" || exceto === "ano"
+        if (!dimColecao && filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
+        if (!dimColecao && filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
+        if (filtros.produtos.length) q.set("produto", filtros.produtos.join(","))
+        if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
+        if (filtros.ids.trim())      q.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+        return fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).catch(() => ({}))
+      }
+      Promise.all([
+        parte("marca"), parte("modelo"), parte("sexo"),
+        parte("cor"), parte("colecao"),
+      ]).then(([fMar, fMod, fSex, fCor, fCol]) => {
+        setOpMarcas(fMar.marcas || [])
+        setOpModelos(fMod.modelos || [])
+        setOpCores(fCor.cores || [])
+        setOpSexos(fSex.sexos?.length ? fSex.sexos : (SEXOS as unknown as string[]))
+        setCascAnos(Array.isArray(fCol.anos) ? fCol.anos.map(String) : null)
+        setCascColecoes(Array.isArray(fCol.colecoes) ? fCol.colecoes : null)
+      })
     }, 250)
     return () => { if (cascataTimer.current) clearTimeout(cascataTimer.current) }
   }, [filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos, filtros.produtos, filtros.lojas, filtros.ids])
