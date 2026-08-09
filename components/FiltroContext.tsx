@@ -195,10 +195,20 @@ export function useFiltros() {
   return ctx
 }
 
+// ANO e ESTACAO viram uma lista de COLECOES — e' assim que os dois chegam ao
+// backend, que nao tem um filtro de "estacao" proprio.
+//
+// ESTACAO SOZINHA precisa funcionar. Antes havia um `if (!anos.length) return []`
+// aqui, e as telas so' chamavam esta funcao quando ano E estacao estavam marcados:
+// marcar so' "Inverno" nao filtrava NADA, em tela nenhuma, sem nenhum aviso. Era o
+// filtro global que "nao pegava".
 export function resolverColecoes(filtros: FiltroState, opPorAno: Record<string,string[]>): string[] {
   if (filtros.colecoes.length > 0) return filtros.colecoes
-  if (!filtros.anos.length) return []
-  const cols = filtros.anos.flatMap(a => opPorAno[a] || [])
+  if (!filtros.anos.length && !filtros.estacoes.length) return []
+  // sem ano: parte de TODAS as colecoes conhecidas, para a estacao ter o que filtrar
+  const cols = filtros.anos.length
+    ? filtros.anos.flatMap(a => opPorAno[a] || [])
+    : Object.values(opPorAno).flat()
   if (!filtros.estacoes.length) return cols
   return cols.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase())))
 }

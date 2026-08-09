@@ -86,9 +86,11 @@ export default function VisaoGeralPage() {
     if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
 
     // Colecao: usa selecao explicita, ou resolve a partir de ano/estacao.
+    // estacao SOZINHA tambem resolve (antes exigia ano junto, e marcar so'
+    // "Inverno" nao filtrava nada)
     if (filtros.colecoes.length) {
       p.set("colecao", filtros.colecoes.join(","))
-    } else if (filtros.anos.length && filtros.estacoes.length) {
+    } else if (filtros.estacoes.length) {
       const cols = resolverColecoes(filtros, opPorAno)
       if (cols.length) p.set("colecao", cols.join(","))
     }
@@ -167,7 +169,7 @@ export default function VisaoGeralPage() {
     if (filtros.sexos.length)    p.set("sexo",    filtros.sexos.join(","))
     if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
     if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
-    else if (filtros.anos.length && filtros.estacoes.length) {
+    else if (filtros.estacoes.length) {
       const cols = resolverColecoes(filtros, opPorAno)
       if (cols.length) p.set("colecao", cols.join(","))
     } else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))

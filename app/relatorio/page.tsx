@@ -185,7 +185,7 @@ export default function RelatorioPage() {
     // para que o relatorio recorte exatamente o mesmo universo que a matriz de compras.
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
     if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
-    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
+    else if (filtros.estacoes.length && colecoesAlvo.length) p.set("colecao", colecoesAlvo.join(","))
     else if (filtros.anos.length) p.set("ano", filtros.anos.join(","))
 
     // Saldo maximo na rede: era o unico filtro que a tela mostrava e nunca enviava.
@@ -281,7 +281,7 @@ export default function RelatorioPage() {
     if (filtros.sexos.length)    corpo.sexo   = filtros.sexos.join(",")
     if (filtros.cores.length)    corpo.cor    = filtros.cores.join(",")
     if (filtros.colecoes.length) corpo.colecao = filtros.colecoes.join(",")
-    else if (filtros.anos.length && filtros.estacoes.length && colecoesAlvo.length) corpo.colecao = colecoesAlvo.join(",")
+    else if (filtros.estacoes.length && colecoesAlvo.length) corpo.colecao = colecoesAlvo.join(",")
     else if (filtros.anos.length) corpo.ano = filtros.anos.join(",")
     if (filtros.saldoMax !== null) corpo.saldo_max = filtros.saldoMax
 
