@@ -448,7 +448,14 @@ export default function RelatorioPage() {
       </div>
 
       <div className="no-print"><FiltroGlobal onBuscar={gerar} loading={loading} mostrarSaldo /></div>
-      <div className="no-print"><FraseRecorte /></div>
+      {/* `buscaFeita` so' fica true quando a secao de vendas foi PEDIDA e voltou sem
+          erro. Sem isso, desmarcar "KPIs de Vendas" deixava s.vendas undefined e o
+          aviso dizia "nada neste recorte" para um recorte que so' nao foi calculado. */}
+      <div className="no-print"><FraseRecorte vazio={{
+        pecas: Number(s.vendas?.pecas_vendidas || 0),
+        skusRecorte: dados?.recorte?.skus_recorte ?? null,
+        buscaFeita: !!dados && !loading && secoesSel.includes("vendas") && !!s.vendas && !s.vendas.erro,
+      }} /></div>
 
       {/* Seletor de secoes */}
       <div className="no-print" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>

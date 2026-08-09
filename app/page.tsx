@@ -378,7 +378,7 @@ export default function VisaoGeralPage() {
       </div>
 
       <FiltroGlobal onBuscar={buscar} loading={loading} />
-      <FraseRecorte />
+      <FraseRecorte vazio={{ pecas: Number(kpis.pecas_vendidas || 0), buscaFeita: buscaFeita && !loading }} />
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px", marginBottom: "20px" }}>

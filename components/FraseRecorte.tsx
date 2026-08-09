@@ -12,9 +12,12 @@
 // ano da COLECAO — atributo do produto, igual a marca — e nao briga com o
 // calendario. A frase declara isso lendo em voz alta, e o mesmo texto nas quatro
 // telas acaba com o "por que aqui da outro numero".
-import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
+import { useEffect, useState } from "react"
+import { useFiltros } from "@/components/FiltroContext"
 import { useSelecao } from "@/components/SelecaoContext"
 import { LOJAS } from "@/components/FiltroGlobal"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
 const NOME_LOJA: Record<string, string> = {
   "1": "P.Nereu", "2": "CD", "3": "Vidal", "4": "Imbuiá",
@@ -29,9 +32,36 @@ function lista(vs: (string | number)[], mapa?: Record<string, string>) {
   return `${n.length} selecionados`
 }
 
-export default function FraseRecorte({ compacta = false }: { compacta?: boolean }) {
+type Props = {
+  compacta?: boolean
+  // Quando a tela ja buscou e nao veio nada, passe os numeros: a frase diz QUAL
+  // eixo esvaziou. Um zero mudo faz a pessoa desconfiar do dado; o dado quase
+  // sempre esta certo e o recorte e' que nao existe.
+  vazio?: { pecas: number, skusRecorte?: number | null, buscaFeita: boolean }
+}
+
+export default function FraseRecorte({ compacta = false, vazio }: Props) {
   const { filtros, periodo } = useFiltros()
   const { itens, transferencias } = useSelecao()
+
+  // COLECOES SEM ANO NO NOME ("GERAL", "FOREVER", "HOUSE OF YORE"): o ANO e'
+  // deduzido do NOME da colecao, entao essas ficam de fora sempre que o filtro de
+  // ano esta ativo. E coerente, mas explica somas que nao fecham com o total — e
+  // ninguem tinha como saber, porque elas simplesmente sumiam.
+  const [semAno, setSemAno] = useState<string[]>([])
+  useEffect(() => {
+    if (!filtros.anos.length) { setSemAno([]); return }
+    let vivo = true
+    Promise.all([
+      fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()),
+      fetch(`${API_URL}/filtros`).then(r => r.json()),
+    ]).then(([pa, f]) => {
+      if (!vivo) return
+      const comAno = new Set(Object.values(pa.por_ano || {}).flat() as string[])
+      setSemAno(((f.colecoes || []) as string[]).filter(c => c && !comAno.has(c)))
+    }).catch(() => {})
+    return () => { vivo = false }
+  }, [filtros.anos.join(",")])
 
   const quando = periodo.tipo === "custom" && periodo.inicio && periodo.fim
     ? `${periodo.inicio.split("-").reverse().join("/")} a ${periodo.fim.split("-").reverse().join("/")}`
@@ -88,6 +118,42 @@ export default function FraseRecorte({ compacta = false }: { compacta?: boolean 
           A seleção substitui o filtro de produto; os demais continuam valendo.
         </div>
       )}
+
+      {/* Coleções que o filtro de ano deixa de fora, por não terem ano no nome. */}
+      {semAno.length > 0 && (
+        <div style={{ fontSize: "11px", marginTop: "6px", color: "var(--warning, #856404)" }}>
+          ⓘ {semAno.length} coleç{semAno.length === 1 ? "ão fica" : "ões ficam"} de fora por não ter
+          {semAno.length === 1 ? "" : "em"} ano no nome
+          {" "}({semAno.slice(0, 4).join(", ")}{semAno.length > 4 ? ` e mais ${semAno.length - 4}` : ""}).
+          {" "}Por isso a soma pode não fechar com o total sem filtro de ano.
+        </div>
+      )}
+
+      {/* DIAGNOSTICO DO VAZIO — qual eixo esvaziou. */}
+      {vazio?.buscaFeita && vazio.pecas === 0 && (() => {
+        const universoVazio = vazio.skusRecorte === 0
+        const janelaCurta = periodo.tipo === "dias" && periodo.dias <= 30
+        let causa: string
+        if (nSel > 0 && universoVazio)
+          causa = `os ${nSel.toLocaleString("pt-BR")} SKUs marcados não passam pelos filtros de produto acima — o cruzamento não sobrou nenhum. Não quer dizer que não venderam.`
+        else if (universoVazio)
+          causa = "nenhum produto casa com esses filtros combinados. Afrouxe um deles."
+        else if (nSel > 0)
+          causa = `os ${nSel.toLocaleString("pt-BR")} SKUs marcados existem, mas não venderam ${quando}. Pode ser estoque parado.`
+        else if (janelaCurta)
+          causa = `esses produtos existem, mas não venderam ${quando}. Tente uma janela maior no calendário.`
+        else
+          causa = `esses produtos existem, mas não tiveram venda ${quando}.`
+        return (
+          <div style={{
+            marginTop: "8px", padding: "8px 10px", borderRadius: "6px",
+            background: "var(--warning-light, #fff3cd)", color: "var(--warning, #856404)",
+            fontSize: "12px",
+          }}>
+            <strong>Nada neste recorte</strong> — {causa}
+          </div>
+        )
+      })()}
     </div>
   )
 }
