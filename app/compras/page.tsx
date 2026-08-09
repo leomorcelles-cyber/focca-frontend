@@ -300,7 +300,10 @@ export default function ComprasPage() {
       filtros.marcas.length || filtros.anos.length || filtros.colecoes.length || filtros.saldoMax !== null
     if (temFiltro) buscar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versaoBusca])
+    // itensSelecionados.length entra aqui porque o carrinho agora RECORTA a matriz:
+    // sem isso, marcar na Visao Geral e vir para ca mostrava a lista antiga.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versaoBusca, itensSelecionados.length])
 
   const lojasFiltradas = useMemo(() =>
     filtros.lojas.length > 0 ? LOJAS.filter(l => filtros.lojas.includes(l.id)) : LOJAS
@@ -314,9 +317,20 @@ export default function ComprasPage() {
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
     const p = new URLSearchParams({ limite: "15000" })
     if (filtros.marcas.length)  p.set("marca",  filtros.marcas.join(","))
-    if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
     if (filtros.cores.length)    p.set("cor",     filtros.cores.join(","))
-    if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+
+    // CARRINHO manda sobre Produto/IDs — mesma regra que o Relatório aplica e
+    // declara em texto. Sem isto a tela ignorava a seleção: marcar 1.038 SKUs na
+    // Visão Geral e vir para cá mostrava outra coisa, sem explicação nenhuma.
+    const codsCarrinho = [...new Set(itensSelecionados
+      .map(it => String(it.cod_produto))
+      .filter(v => v && v !== "undefined" && v !== "null"))]
+    if (codsCarrinho.length) {
+      p.set("cod_produto", codsCarrinho.join(","))
+    } else {
+      if (filtros.produtos.length) p.set("produto", filtros.produtos.join(","))
+      if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+    }
     if (filtros.modelos.length) p.set("modelo", filtros.modelos.join(","))
     if (filtros.sexos.length)   p.set("sexo",   filtros.sexos.join(","))
     if (filtros.colecoes.length) p.set("colecao", filtros.colecoes.join(","))
