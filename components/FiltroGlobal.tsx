@@ -107,34 +107,29 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   useEffect(() => {
     if (cascataTimer.current) clearTimeout(cascataTimer.current)
     cascataTimer.current = setTimeout(() => {
-      const parte = (exceto: string) => {
-        const q = new URLSearchParams()
-        if (exceto !== "marca"   && filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
-        if (exceto !== "modelo"  && filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
-        if (exceto !== "sexo"    && filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
-        if (exceto !== "cor"     && filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
-        // colecao e ano sao a MESMA dimensao vista de dois jeitos: o ano resolve
-        // para uma lista de colecoes. Um tem de excluir o outro, senao voltam a se
-        // filtrar mutuamente e o problema reaparece com outra roupa.
-        const dimColecao = exceto === "colecao" || exceto === "ano"
-        if (!dimColecao && filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
-        if (!dimColecao && filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
-        if (filtros.produtos.length) q.set("produto", filtros.produtos.join(","))
-        if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
-        if (filtros.ids.trim())      q.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
-        return fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).catch(() => ({}))
-      }
-      Promise.all([
-        parte("marca"), parte("modelo"), parte("sexo"),
-        parte("cor"), parte("colecao"),
-      ]).then(([fMar, fMod, fSex, fCor, fCol]) => {
-        setOpMarcas(fMar.marcas || [])
-        setOpModelos(fMod.modelos || [])
-        setOpCores(fCor.cores || [])
-        setOpSexos(fSex.sexos?.length ? fSex.sexos : (SEXOS as unknown as string[]))
-        setCascAnos(Array.isArray(fCol.anos) ? fCol.anos.map(String) : null)
-        setCascColecoes(Array.isArray(fCol.colecoes) ? fCol.colecoes : null)
-      })
+      // UMA chamada. O /filtros ja' devolve cada dimensao excluindo o filtro DELA
+      // PROPRIA — esta no docstring dele e foi medido: com marca+sexo, a lista de
+      // sexos volta inteira. Eu tinha trocado isto por 5 chamadas em paralelo
+      // achando que a regra faltava; era redundancia pura, 4 requisicoes a mais a
+      // cada mexida no filtro. O /filtros custa ~5,3s, entao cada uma pesa.
+      const q = new URLSearchParams()
+      if (filtros.marcas.length)   q.set("marca",   filtros.marcas.join(","))
+      if (filtros.modelos.length)  q.set("modelo",  filtros.modelos.join(","))
+      if (filtros.sexos.length)    q.set("sexo",    filtros.sexos.join(","))
+      if (filtros.cores.length)    q.set("cor",     filtros.cores.join(","))
+      if (filtros.colecoes.length) q.set("colecao", filtros.colecoes.join(","))
+      if (filtros.anos.length)     q.set("ano",     filtros.anos.join(","))
+      if (filtros.produtos.length) q.set("produto", filtros.produtos.join(","))
+      if (filtros.lojas.length)    q.set("loja",    filtros.lojas.join(","))
+      if (filtros.ids.trim())      q.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+      fetch(`${API_URL}/filtros?${q}`).then(r => r.json()).then(f => {
+        setOpMarcas(f.marcas || [])
+        setOpModelos(f.modelos || [])
+        setOpCores(f.cores || [])
+        setOpSexos(f.sexos?.length ? f.sexos : (SEXOS as unknown as string[]))
+        setCascAnos(Array.isArray(f.anos) ? f.anos.map(String) : null)
+        setCascColecoes(Array.isArray(f.colecoes) ? f.colecoes : null)
+      }).catch(() => {})
     }, 250)
     return () => { if (cascataTimer.current) clearTimeout(cascataTimer.current) }
   }, [filtros.marcas, filtros.modelos, filtros.sexos, filtros.cores, filtros.colecoes, filtros.anos, filtros.produtos, filtros.lojas, filtros.ids])
