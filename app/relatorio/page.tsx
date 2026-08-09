@@ -7,6 +7,7 @@ import { useSelecao, chaveTransf } from "@/components/SelecaoContext"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import MiniFoto from "@/components/MiniFoto"
+import FraseRecorte from "@/components/FraseRecorte"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -447,6 +448,7 @@ export default function RelatorioPage() {
       </div>
 
       <div className="no-print"><FiltroGlobal onBuscar={gerar} loading={loading} mostrarSaldo /></div>
+      <div className="no-print"><FraseRecorte /></div>
 
       {/* Seletor de secoes */}
       <div className="no-print" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>

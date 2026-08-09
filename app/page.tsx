@@ -11,6 +11,7 @@ import AbaComGrafico from "@/components/AbaComGrafico"
 import ModalEstoque from "@/components/ModalEstoque"
 import MiniFoto from "@/components/MiniFoto"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
+import FraseRecorte from "@/components/FraseRecorte"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -377,6 +378,7 @@ export default function VisaoGeralPage() {
       </div>
 
       <FiltroGlobal onBuscar={buscar} loading={loading} />
+      <FraseRecorte />
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: "10px", marginBottom: "20px" }}>

@@ -398,9 +398,15 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
             </div>
           </div>
 
-          {/* 2. ANO */}
+          {/* 2. ANO DA COLECAO — nao e' o ano da venda.
+              Era so' "Ano" ao lado de um calendario, e a pessoa lia como se um
+              contradissesse o outro. Sao eixos independentes: o calendario diz
+              QUANDO a venda aconteceu, este diz DE QUE COLECAO e' o produto. */}
           <div>
-            <label style={lbl}>Ano {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
+            <label style={lbl}>Ano da coleção {filtros.anos.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.anos.length}</span>}</label>
+            <div style={{ fontSize: "10px", color: "var(--muted)", marginBottom: "6px", marginTop: "-2px" }}>
+              atributo do produto — não filtra a data da venda
+            </div>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
               {anosVis.map(a => <Chip key={a} label={a} small ativo={filtros.anos.includes(a)} onClick={() => up({ anos: toggle(filtros.anos, a), estacoes: [], colecoes: [] })} />)}
             </div>

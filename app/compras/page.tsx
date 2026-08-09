@@ -5,6 +5,7 @@ import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import MiniFoto from "@/components/MiniFoto"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
 import { useSelecao, chaveItem } from "@/components/SelecaoContext"
+import FraseRecorte from "@/components/FraseRecorte"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -554,6 +555,7 @@ export default function ComprasPage() {
       </div>
 
       <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
+      <FraseRecorte />
 
       {produtos.length > 0 && (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 16px", marginBottom: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
