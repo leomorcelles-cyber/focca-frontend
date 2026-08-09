@@ -1,6 +1,7 @@
 "use client"
 import { useSelecao, chaveItem } from "@/components/SelecaoContext"
 import MiniFoto from "@/components/MiniFoto"
+import Cor from "@/components/Cor"
 import { useRouter } from "next/navigation"
 
 const LOJAS_NOMES: Record<string, string> = {
@@ -54,7 +55,13 @@ export default function CarrinhoPainel() {
                       <MiniFoto url={it.imagem} tam={38} alt={it.produto} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.produto}</div>
-                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>{it.cor} · Tam {it.tamanho} {it.marca ? `· ${it.marca}` : ""}</div>
+                        {/* A cor vem com amostra propria: a foto do Microvix e' a
+                            mesma para todas as cores do produto, entao ela nao serve
+                            para distinguir verde de azul. */}
+                        <div style={{ fontSize: "11px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <Cor nome={it.cor} />
+                          <span>· Tam {it.tamanho} {it.marca ? `· ${it.marca}` : ""}</span>
+                        </div>
                       </div>
                       <button onClick={() => remover(k)} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>✕</button>
                     </div>

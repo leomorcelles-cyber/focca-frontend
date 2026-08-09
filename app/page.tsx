@@ -12,6 +12,7 @@ import ModalEstoque from "@/components/ModalEstoque"
 import MiniFoto from "@/components/MiniFoto"
 import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 import FraseRecorte from "@/components/FraseRecorte"
+import Cor from "@/components/Cor"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -341,7 +342,8 @@ export default function VisaoGeralPage() {
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.produto}</span>
       </span>
     ) },
-    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+    // amostra de cor: a foto do ERP e' a mesma para todas as cores do produto
+    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" }, render: (r: any) => <Cor nome={r.cor} /> },
     { key: "tamanho", label: "Tam", align: "center" as const, tdStyle: { fontWeight: 700 } },
     { key: "modelo", label: "Modelo" },
     { key: "marca", label: "Marca" },

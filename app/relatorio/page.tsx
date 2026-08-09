@@ -8,6 +8,7 @@ import TabelaOrdenavel from "@/components/TabelaOrdenavel"
 import SeletorPeriodo from "@/components/SeletorPeriodo"
 import MiniFoto from "@/components/MiniFoto"
 import FraseRecorte from "@/components/FraseRecorte"
+import Cor from "@/components/Cor"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
@@ -612,7 +613,7 @@ export default function RelatorioPage() {
                         <span>{p.produto}</span>
                       </span>
                     ) },
-                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" }, render: (r: any) => <Cor nome={r.cor} /> },
                     { key: "marca", label: "Marca" },
                     { key: "colecao", label: "Coleção", tdStyle: { color: "var(--muted)", fontSize: "11px" } },
                     { key: "qtd", label: "Vendido", align: "right", sortBy: (p: any) => Number(p.qtd) || 0, tdStyle: { fontWeight: 700 }, render: (p: any) => fmtN(p.qtd) },
@@ -689,7 +690,7 @@ export default function RelatorioPage() {
                         <span>{t.produto}</span>
                       </span>
                     ) },
-                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" } },
+                    { key: "cor", label: "Cor", tdStyle: { color: "var(--muted)" }, render: (r: any) => <Cor nome={r.cor} /> },
                     { key: "tamanho", label: "Tam", align: "center" as const, tdStyle: { fontWeight: 700 } },
                     { key: "de_loja", label: "De", render: (t: any) => <span style={{ color: t.de_eh_cd ? "var(--success)" : "var(--text)", fontWeight: t.de_eh_cd ? 700 : 400 }}>{String(t.de_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "")}</span> },
                     { key: "para_loja", label: "Para", render: (t: any) => String(t.para_loja || "").replace("FOCCA JEANS - ", "").replace("FOCCA ", "") },
@@ -781,7 +782,7 @@ export default function RelatorioPage() {
                               <span>{it.produto}</span>
                             </span>
                           </td>
-                          <td style={{ ...td, color: "var(--muted)" }}>{it.cor}</td>
+                          <td style={{ ...td, color: "var(--muted)" }}><Cor nome={it.cor} /></td>
                           <td style={{ ...td, fontWeight: 700, textAlign: "center" }}>{it.tamanho}</td>
                           <td style={td}>{it.marca}</td>
                           <td style={{ ...td, textAlign: "right", color: "var(--text)" }}>{precoTxt}{it._ncods > 1 ? <span style={{ fontSize: "10px", color: "var(--muted)" }}> ({it._ncods} cods)</span> : null}</td>
