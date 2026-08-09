@@ -63,9 +63,43 @@ type SelecaoContextType = {
 
 const SelecaoContext = createContext<SelecaoContextType | null>(null)
 
+// PERSISTENCIA — mesmo motivo (e mesmo padrao) do FiltroContext. Sem isto o
+// carrinho vivia so em memoria: sobrevivia ao <Link> (navegacao client-side) mas
+// morria em F5, aba nova ou volta pelo historico. Como o filtro AO LADO dele
+// persistia, o efeito era recarregar e ver o recorte pela metade — filtro intacto,
+// selecao vazia. Era o "as vezes nao se manteve".
+const LS_ITENS = "focca_selecao_itens"
+const LS_TRANSF = "focca_selecao_transf"
+
+function lerLista<T>(chave: string): T[] | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(chave)
+    if (!raw) return null
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : null
+  } catch { return null }
+}
+
+function gravarLista(chave: string, valor: unknown[], enxugar?: (v: any) => any) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(chave, JSON.stringify(valor))
+  } catch {
+    // Cota estourada (~5MB): acontece com carrinho de milhares de SKUs, que e'
+    // justamente quem mais doi perder. O que nao pode sumir e' a SELECAO; lojas e
+    // imagem sao snapshot de exibicao e as telas rebuscam.
+    if (!enxugar) return
+    try { window.localStorage.setItem(chave, JSON.stringify(valor.map(enxugar))) } catch {}
+  }
+}
+
 export function SelecaoProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<ItemSelecionado[]>([])
   const [painelAberto, setPainelAberto] = useState(false)
+  // So grava depois de restaurar: no primeiro render `itens` e' [] e o efeito de
+  // gravacao apagaria o que estava salvo antes mesmo de alguem ler.
+  const [hidratado, setHidratado] = useState(false)
 
   const adicionar = useCallback((it: ItemSelecionado) => {
     setItens(prev => {
@@ -120,6 +154,23 @@ export function SelecaoProvider({ children }: { children: ReactNode }) {
   // Esvaziou (pelo botao Limpar ou removendo um a um): o painel desmonta, mas o
   // estado ficaria "aberto" e ele reapareceria sozinho no proximo item marcado.
   useEffect(() => { if (itens.length === 0) setPainelAberto(false) }, [itens.length])
+
+  // Restaura na montagem (uma vez), depois libera a gravacao.
+  useEffect(() => {
+    const i = lerLista<ItemSelecionado>(LS_ITENS); if (i?.length) setItens(i)
+    const t = lerLista<TransferenciaSelecionada>(LS_TRANSF); if (t?.length) setTransferencias(t)
+    setHidratado(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hidratado) return
+    gravarLista(LS_ITENS, itens, ({ lojas, imagem, ...resto }: ItemSelecionado) => resto)
+  }, [itens, hidratado])
+
+  useEffect(() => {
+    if (!hidratado) return
+    gravarLista(LS_TRANSF, transferencias)
+  }, [transferencias, hidratado])
 
   return (
     <SelecaoContext.Provider value={{ itens, adicionar, adicionarVarios, remover, toggle, temItem, limpar, total: itens.length, painelAberto, setPainelAberto, transferencias, toggleTransf, temTransf, limparTransf }}>
