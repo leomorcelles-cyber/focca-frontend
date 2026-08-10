@@ -5,7 +5,11 @@ import { useSelecao } from "@/components/SelecaoContext"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
 
-type Msg = { role: "user" | "assistant"; content: string; consultas?: any[] }
+type Uso = {
+  entrada: number; saida: number; cache_leitura: number; cache_escrita: number
+  usd: number; brl: number; modelo: string; promo: boolean
+}
+type Msg = { role: "user" | "assistant"; content: string; consultas?: any[]; uso?: Uso }
 
 const SUGESTOES = [
   "Top 10 produtos que mais venderam nos últimos 30 dias",
@@ -178,7 +182,8 @@ export default function ChatPage() {
       // então o texto aparece sendo escrito em vez de surgir pronto no fim.
       let resposta = ""
       let consultas: any[] = []
-      const pintar = () => setMsgs([...novas, { role: "assistant", content: resposta, consultas }])
+      let uso: Uso | undefined
+      const pintar = () => setMsgs([...novas, { role: "assistant", content: resposta, consultas, uso }])
       const reader = res.body.getReader()
       const dec = new TextDecoder()
       let buf = ""
@@ -197,7 +202,9 @@ export default function ChatPage() {
           try { ev = JSON.parse(linha.slice(6)) } catch { continue }
           if (ev.tipo === "texto") { resposta += ev.delta; pintar() }
           else if (ev.tipo === "consulta") { consultas = [...consultas, ev]; pintar() }
+          else if (ev.tipo === "fim") { uso = ev.uso; pintar() }
           else if (ev.tipo === "erro") {
+            uso = ev.uso ?? uso
             consultas = ev.consultas || consultas
             resposta += `${resposta ? "\n\n" : ""}⚠️ ${ev.erro}`
             pintar()
@@ -264,9 +271,23 @@ export default function ChatPage() {
               borderRadius: "12px", fontSize: "13px",
             }}>
               {m.role === "user" ? <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div> : renderMarkdown(m.content)}
-              {m.consultas && m.consultas.length > 0 && (
-                <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--muted)" }}>
-                  🔎 {m.consultas.length} consulta{m.consultas.length > 1 ? "s" : ""} ao banco
+              {(m.consultas?.length || m.uso) && (
+                <div style={{ marginTop: "8px", fontSize: "11px", color: "var(--muted)", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {m.consultas && m.consultas.length > 0 && (
+                    <span>🔎 {m.consultas.length} consulta{m.consultas.length > 1 ? "s" : ""} ao banco</span>
+                  )}
+                  {/* Custo REAL desta análise (usage devolvido pela API), não estimativa.
+                      Fica visível para que uma pergunta cara não passe despercebida. */}
+                  {m.uso && (
+                    <span
+                      title={`${m.uso.modelo} · entrada ${m.uso.entrada.toLocaleString("pt-BR")} tokens `
+                        + `(${m.uso.cache_leitura.toLocaleString("pt-BR")} lidos do cache) · `
+                        + `saída ${m.uso.saida.toLocaleString("pt-BR")} · US$ ${m.uso.usd.toFixed(5)}`
+                        + (m.uso.promo ? " · preço promocional vigente" : "")}
+                      style={{ cursor: "help" }}>
+                      💰 R$ {m.uso.brl.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
