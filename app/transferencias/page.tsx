@@ -2,6 +2,7 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import MiniFoto from "@/components/MiniFoto"
+import Cor from "@/components/Cor"
 import FiltroGlobal, { LOJAS } from "@/components/FiltroGlobal"
 import { useFiltros, resolverColecoes } from "@/components/FiltroContext"
 import BotoesExport from "@/components/BotoesExport"
@@ -224,7 +225,7 @@ export default function TransferenciasPage() {
   // Faixa de 46px para a miniatura, entre o checkbox e o nome: quem separa a peca
   // reconhece pela foto antes de ler o nome, e o codigo embaixo do nome resolve os
   // casos em que duas cores tem a mesma foto (o Microvix so tem 1 foto por produto).
-  const cols = "38px 46px 180px 80px 45px 90px 1fr 70px 1fr"
+  const cols = "38px 46px 190px 105px 45px 90px 1fr 70px 1fr"
 
   // Transferencias VISIVEIS (ja ordenadas/filtradas) e o estado do "marcar todas".
   const transfDe = (r: any) => ({
@@ -354,7 +355,7 @@ export default function TransferenciasPage() {
       ) : (
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: "880px" }}>
+            <div style={{ minWidth: "915px" }}>
               <div style={{ display: "grid", gridTemplateColumns: cols, background: "var(--surface2)", borderBottom: "2px solid var(--border)" }}>
                 <div style={{ ...th("center"), display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <input type="checkbox" checked={todasMarcadas} onChange={alternarTodas}
@@ -396,13 +397,20 @@ export default function TransferenciasPage() {
                         </div>
                         <div title={row.produto} style={{ padding: "8px 12px", overflow: "hidden" }}>
                           <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.produto}</div>
-                          {/* O codigo e' a desempate: e' por ele que a peca e' achada no
-                              Microvix, e e' o mesmo que sai na coluna "Cod" do arquivo. */}
-                          <div style={{ fontSize: "10px", color: "var(--muted)", fontFamily: "ui-monospace, monospace", marginTop: "1px" }}>
+                          {/* O codigo e' o desempate: e' por ele que a peca e' achada no
+                              Microvix, e e' o mesmo que sai na coluna "Cod" do arquivo.
+                              Legivel a distancia: quem separa le' isto de pe, no deposito. */}
+                          <div style={{ fontSize: "13px", color: "var(--text)", fontWeight: 700, fontFamily: "ui-monospace, monospace", letterSpacing: "0.3px", marginTop: "2px" }}>
                             {row.cod_produto}
                           </div>
                         </div>
-                        <div style={{ padding: "8px 12px", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.cor}</div>
+                        {/* Bolinha + nome, o mesmo componente da Visao Geral, do Relatorio
+                            e do carrinho — Transferencias era a unica tela sem ele. A cor
+                            precisa se mostrar sozinha porque o Microvix guarda UMA foto por
+                            produto e a repete em todas as cores. */}
+                        <div style={{ padding: "8px 12px", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <Cor nome={row.cor} tam={13} />
+                        </div>
                         <div style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700 }}>{row.tamanho}</div>
 
                         <div style={{ padding: "8px 12px", textAlign: "center" }}>

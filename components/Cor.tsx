@@ -17,8 +17,8 @@ const NUCLEOS: [RegExp, string][] = [
   [/BRANC/, "#ffffff"],
   [/PRET|BLACK|ONYX/, "#1a1a1a"],
   [/CHUMB|GRAFIT/, "#4a4f55"],
-  [/CINZ|MESCLA|GREY|GRAY/, "#9aa0a6"],
-  [/MARINH|NAVY/, "#1b2a4a"],
+  [/CINZ|MESCLA|GREY|GRAY|CIMENTO/, "#9aa0a6"],
+  [/MARINH|NAVY|NAVAL/, "#1b2a4a"],
   [/JEANS|DENIM|INDIGO/, "#3b5a80"],
   [/LAGUNA|TURQUES|TIFFANY|AQUA/, "#3fa8a0"],
   [/AZUL|BLUE|CELEST/, "#2f6fb5"],
@@ -27,17 +27,17 @@ const NUCLEOS: [RegExp, string][] = [
   [/VINH|BORDO|MARSAL|BURGUND/, "#6e1f2e"],
   [/VERMELH|RED|CEREJ|RUB/, "#cc2b2b"],
   [/CORAL|SALMAO|SALMON/, "#f4796b"],
-  [/ROSA|PINK|BLUSH/, "#e87aa4"],
+  [/ROSA|ROSE|PINK|BLUSH/, "#e87aa4"],
   [/LILAS|LAVANDA|LILAC/, "#b39ddb"],
   [/ROX|VIOLET|PURP|UVA/, "#7b4ea3"],
   [/LARANJ|ORANGE|TANGERIN/, "#ef7d2e"],
   [/AMAREL|YELLOW|MOSTARD|OURO|GOLD/, "#e8b93a"],
   [/PAPRICA|PIMENT/, "#b8412e"],
-  [/CARAMEL|CAMEL|WHISK|TERRACOT|TELHA|FERRUGEM|CANELA|MOCCA|MOCA\b/, "#a8632c"],
-  [/MARRO|CHOCOLAT|CAFE|BROWN|TABACO/, "#6b4423"],
+  [/CARAMEL|CAMEL|WHISK|TERRACOT|TELHA|FERRUGEM|CANELA|CONHAQUE|COGNAC|MOCCA|MOCA\b/, "#a8632c"],
+  [/MARRO|CASTANH|CHOCOLAT|CAFE|BROWN|TABACO/, "#6b4423"],
   [/PISTACHE/, "#a8c686"],
   [/MANTEIG|CREME|CHAMPAGNE|MARFIM|PEROLA/, "#f0e6cc"],
-  [/BEGE|AREIA|NUDE|KHAKI|CAQUI|SAND/, "#cbb897"],
+  [/BEGE|AREIA|NUDE|KHAKI|KAKHI|CAQUI|SAND/, "#cbb897"],
   [/VERY\s*PERI|PERIWINK/, "#6667ab"],
   [/PRATA|SILVER|METAL|BRILHO/, "#c0c4c8"],
   // "OFF" sozinho e' abreviacao de OFF WHITE no cadastro (1.596 pecas).
@@ -48,7 +48,7 @@ const NUCLEOS: [RegExp, string][] = [
 // Nomes que NAO sao cor: nao ganham bolinha, porque uma bolinha ali mentiria.
 // "UNICA" e' o maior volume do cadastro (7.098 pecas) e significa "sem variacao
 // de cor"; "MIX DE CORES" e' estampa.
-const NAO_E_COR = /^(UNICA|UNICO|MIX DE CORES|VARIAS|SORTIDO|ESTAMPAD[OA])$/
+const NAO_E_COR = /^(UNICA\s*\d*|UNICO|MIX DE CORES|VARIAS|SORTIDO|ESTAMPAD[OA]|ONCA|POA|XADREZ|LISTRAD[OA]|ESPINHA DE PEIXE)$/
 
 // CLARO/ESCURO ajustam o tom — sao o que mais distingue variantes do mesmo nucleo
 // ("VERDE" x "VERDE CLARO"), e sem isso as duas sairiam identicas na tela.
