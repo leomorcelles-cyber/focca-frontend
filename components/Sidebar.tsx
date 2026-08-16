@@ -10,6 +10,7 @@ const nav = [
   { href: "/compras",        label: "Compras",          icon: "↓" },
   { href: "/transferencias", label: "Transferencias",   icon: "⇄" },
   { href: "/relatorio",      label: "Relatorio",        icon: "▤" },
+  { href: "/metas",          label: "Metas",            icon: "◎" },
   { href: "/chat",           label: "Chat IA",          icon: "✦" },
 ]
 
