@@ -83,6 +83,7 @@ export default function VisaoGeralPage() {
   // Monta os query params a partir dos filtros globais (multi-selecao via virgula)
   function montarParams() {
     const p = new URLSearchParams(periodoParaParams(periodo))
+    if (filtros.vendedores.length) p.set("vendedor", filtros.vendedores.join(","))
     if (filtros.lojas.length)   p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)  p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length) p.set("modelo",  filtros.modelos.join(","))
@@ -180,6 +181,8 @@ export default function VisaoGeralPage() {
   // Nao inclui produto/cod_produto — quem clica ja define a dimensao.
   const queryEstoqueModal = useMemo(() => {
     const p = new URLSearchParams()
+    // sem vendedor de proposito: este bloco monta a consulta de ESTOQUE do modal,
+    // e estoque nao tem vendedor (ver FiltroGlobal / _where_estoque no backend).
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))

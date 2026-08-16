@@ -59,9 +59,16 @@ function Chip({ label, ativo, onClick, small }: { label: string, ativo: boolean,
 const lbl = { fontSize: "10px", color: "var(--muted)", fontWeight: 700 as const, textTransform: "uppercase" as const, letterSpacing: "0.7px", marginBottom: "10px", display: "block" as const, opacity: 0.75 }
 const inp = { padding: "7px 11px", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "12px", marginBottom: "8px", background: "var(--surface2)", color: "var(--text)", outline: "none", width: "100%", display: "block" as const }
 
-type Props = { onBuscar: () => void, loading?: boolean, mostrarSaldo?: boolean }
+type Props = {
+  onBuscar: () => void, loading?: boolean, mostrarSaldo?: boolean,
+  // Telas de ESTOQUE (Compras, Transferencias) passam false: o chip de vendedor
+  // aparece, mas desligado e com o motivo a' vista. Escondê-lo faria o filtro
+  // global significar coisas diferentes em cada tela; deixá-lo ativo faria a
+  // gerente achar que recortou quando nada mudou.
+  vendedorAplica?: boolean,
+}
 
-export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props) {
+export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo, vendedorAplica = true }: Props) {
   const { filtros, setFiltros, dispararBusca, periodo } = useFiltros()
   const { total: totalSelecao } = useSelecao()
 
@@ -70,6 +77,7 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   const [opCores,   setOpCores]   = useState<string[]>([])
   const [opPorAno,  setOpPorAno]  = useState<Record<string,string[]>>({})
   const [opAnos,    setOpAnos]    = useState<string[]>([])
+  const [opVend,    setOpVend]    = useState<{ cod_vendedor: number, nome: string }[]>([])
   // Cascata: opcoes compativeis com os filtros ativos (null = sem restricao)
   const [opSexos,      setOpSexos]      = useState<string[]>(SEXOS as unknown as string[])
   const [cascAnos,     setCascAnos]     = useState<string[] | null>(null)
@@ -87,6 +95,9 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
   // Colecoes-por-ano: carga unica
   useEffect(() => {
     fetch(`${API_URL}/filtros/colecoes-por-ano`).then(r => r.json()).then(c => { setOpPorAno(c.por_ano || {}); setOpAnos(c.anos || []) }).catch(() => {})
+    // Lista curta de proposito: so quem vendeu no ultimo ano (~38), nao o cadastro
+    // inteiro (167, a maioria desligado ha anos).
+    fetch(`${API_URL}/filtros/vendedores`).then(r => r.json()).then(v => setOpVend(Array.isArray(v) ? v : [])).catch(() => {})
   }, [])
 
   // Opcoes EM CASCATA (debounce 250ms).
@@ -268,7 +279,8 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
 
   const totalFiltros = filtros.lojas.length + filtros.sexos.length + filtros.modelos.length +
     filtros.produtos.length + filtros.marcas.length + filtros.anos.length + filtros.estacoes.length +
-    filtros.colecoes.length + filtros.cores.length + (filtros.ids ? 1 : 0) + (filtros.saldoMax !== null ? 1 : 0)
+    filtros.colecoes.length + filtros.cores.length + filtros.vendedores.length +
+    (filtros.ids ? 1 : 0) + (filtros.saldoMax !== null ? 1 : 0)
 
   // BARRA DE FILTROS ATIVOS — antes o cabecalho dizia so "13 ativos" e era preciso
   // abrir o painel e varrer 11 campos para saber QUAIS. Cada chip remove o proprio
@@ -287,6 +299,13 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
     filtros.sexos.forEach(v => out.push({ rotulo: "Sexo", valor: v, remover: () => up({ sexos: filtros.sexos.filter(x => x !== v) }) }))
     filtros.cores.forEach(v => out.push({ rotulo: "Cor", valor: v, remover: () => up({ cores: filtros.cores.filter(x => x !== v) }) }))
     filtros.produtos.forEach(v => out.push({ rotulo: "Produto", valor: v, remover: () => up({ produtos: filtros.produtos.filter(x => x !== v) }) }))
+    // O rotulo avisa quando o chip esta ligado numa tela que nao o usa — assim o
+    // recorte ativo nunca mente sobre o que esta valendo naquela tela.
+    filtros.vendedores.forEach(id => out.push({
+      rotulo: vendedorAplica ? "Vendedor" : "Vendedor (não se aplica)",
+      valor: opVend.find(v => v.cod_vendedor === id)?.nome || String(id),
+      remover: () => up({ vendedores: filtros.vendedores.filter(x => x !== id) }),
+    }))
     if (filtros.ids.trim()) out.push({ rotulo: "IDs", valor: filtros.ids.trim(), remover: () => { setIdsLocal(""); up({ ids: "" }) } })
     if (filtros.saldoMax !== null) out.push({
       rotulo: "Saldo", valor: filtros.saldoMax === 0 ? "zerados" : `≤ ${filtros.saldoMax}`,
@@ -553,6 +572,29 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo }: Props)
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
               {LOJAS.map(l => <Chip key={l.id} label={l.nome} ativo={filtros.lojas.includes(l.id)} onClick={() => up({ lojas: toggle(filtros.lojas, l.id) })} />)}
             </div>
+          </div>
+
+          {/* VENDEDOR — recorta VENDA, nunca estoque. Nas telas de estoque ele fica
+              visivel porem inerte, com o porque escrito: some sem explicacao seria
+              pior (o filtro global deixaria de ser o mesmo em toda parte). */}
+          <div style={{ opacity: vendedorAplica ? 1 : 0.55 }}>
+            <label style={lbl}>
+              Vendedor {filtros.vendedores.length > 0 && <span style={{ color: "var(--primary)" }}>· {filtros.vendedores.length}</span>}
+            </label>
+            <div style={{ fontSize: "10px", color: "var(--muted)", marginBottom: "6px", marginTop: "-2px" }}>
+              {vendedorAplica
+                ? "recorta as vendas do período"
+                : "não se aplica aqui — estoque não tem vendedor"}
+            </div>
+            {vendedorAplica && (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", maxHeight: "132px", overflowY: "auto" }}>
+                {opVend.map(v => (
+                  <Chip key={v.cod_vendedor} label={v.nome} small
+                    ativo={filtros.vendedores.includes(v.cod_vendedor)}
+                    onClick={() => up({ vendedores: toggle(filtros.vendedores, v.cod_vendedor) })} />
+                ))}
+              </div>
+            )}
           </div>
           {mostrarSaldo && (
             <div>

@@ -13,13 +13,17 @@ export type FiltroState = {
   estacoes: string[]
   colecoes: string[]
   cores: string[]
+  // Codigo do vendedor. Diferente dos demais, este NAO recorta estoque: nenhuma
+  // tabela de estoque tem vendedor (uma peca na prateleira nao e' de ninguem).
+  // Telas de estoque mostram o chip inerte em vez de fingir que filtraram.
+  vendedores: number[]
   ids: string
   saldoMax: number | null
 }
 
 export const filtroVazio: FiltroState = {
   lojas: [], sexos: [], modelos: [], produtos: [], marcas: [],
-  anos: [], estacoes: [], colecoes: [], cores: [], ids: "", saldoMax: null,
+  anos: [], estacoes: [], colecoes: [], cores: [], vendedores: [], ids: "", saldoMax: null,
 }
 
 // --- PERIODO GLOBAL (calendario) ---

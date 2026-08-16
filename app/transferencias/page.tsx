@@ -254,7 +254,8 @@ export default function TransferenciasPage() {
         <BotoesExport areaId="area-export" titulo="Transferências Sugeridas" onExportarDados={exportarDados} />
       </div>
 
-      <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} /></div>
+      {/* estoque + giro: vendedor nao recorta nada aqui (ver FiltroGlobal) */}
+      <div data-no-export><FiltroGlobal onBuscar={buscar} loading={loading} vendedorAplica={false} /></div>
       <FraseRecorte />
 
       {/* Filtro de urgencia */}

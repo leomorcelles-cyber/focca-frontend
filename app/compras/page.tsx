@@ -563,7 +563,9 @@ export default function ComprasPage() {
         )}
       </div>
 
-      <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo />
+      {/* vendedorAplica={false}: esta tela e' estoque + giro, e nenhuma tabela de
+          estoque tem vendedor. O chip fica visivel e inerte, com o motivo. */}
+      <FiltroGlobal onBuscar={buscar} loading={loading} mostrarSaldo vendedorAplica={false} />
       <FraseRecorte />
 
       {produtos.length > 0 && (

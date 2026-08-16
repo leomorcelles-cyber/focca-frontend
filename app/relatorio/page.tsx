@@ -176,6 +176,7 @@ export default function RelatorioPage() {
   function montarParams() {
     // Periodo do calendario compartilhado (inicio/fim ou dias)
     const p = new URLSearchParams({ ...paramsPeriodo, secoes: secoesSel.join(",") })
+    if (filtros.vendedores.length) p.set("vendedor", filtros.vendedores.join(","))
     if (filtros.lojas.length)    p.set("loja",    filtros.lojas.join(","))
     if (filtros.marcas.length)   p.set("marca",   filtros.marcas.join(","))
     if (filtros.modelos.length)  p.set("modelo",  filtros.modelos.join(","))
