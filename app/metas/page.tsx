@@ -49,6 +49,7 @@ export default function MetasPage() {
   const [vendedores, setVendedores] = useState<any[]>([])
   const [lojaSel, setLojaSel] = useState<number | null>(null)
   const [recorte, setRecorte] = useState(false)
+  const [aplicarProduto, setAplicarProduto] = useState(false)
   const [opPorAno, setOpPorAno] = useState<Record<string, string[]>>({})
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string>("")
@@ -68,20 +69,31 @@ export default function MetasPage() {
   // O filtro de LOJA recorta meta e realizado (a meta do ERP e por loja). Os chips
   // de produto so tem como recortar o realizado — o backend devolve recorte_produto
   // e apaga o %, para nao comparar um pedaco das vendas com a meta cheia.
+  // Quantos chips de PRODUTO estao ligados no filtro global (herdados de outra tela).
+  const chipsProduto = filtros.marcas.length + filtros.modelos.length + filtros.sexos.length +
+    filtros.cores.length + filtros.produtos.length + filtros.colecoes.length +
+    filtros.anos.length + (filtros.ids.trim() ? 1 : 0)
+
+  // PADRAO: esta tela IGNORA os chips de produto. Aplica-los apagava %, falta e
+  // projecao de todas as linhas — quem abre Metas via a tela em branco sem saber
+  // que herdou um recorte de Compras. Meta nao tem quebra por produto, entao o
+  // default util e' a meta cheia; quem quiser a fatia liga no botao.
   const params = useMemo(() => {
     const p = new URLSearchParams({ periodo })
-    if (filtros.lojas.length)    p.set("loja",     filtros.lojas.join(","))
-    if (filtros.marcas.length)   p.set("marca",    filtros.marcas.join(","))
-    if (filtros.modelos.length)  p.set("modelo",   filtros.modelos.join(","))
-    if (filtros.sexos.length)    p.set("sexo",     filtros.sexos.join(","))
+    if (filtros.lojas.length)      p.set("loja",     filtros.lojas.join(","))
     if (filtros.vendedores.length) p.set("vendedor", filtros.vendedores.join(","))
-    if (filtros.cores.length)    p.set("cor",      filtros.cores.join(","))
-    if (filtros.produtos.length) p.set("produto",  filtros.produtos.join(","))
-    if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
-    const cols = resolverColecoes(filtros, opPorAno)
-    if (cols.length) p.set("colecao", cols.join(","))
+    if (aplicarProduto) {
+      if (filtros.marcas.length)   p.set("marca",    filtros.marcas.join(","))
+      if (filtros.modelos.length)  p.set("modelo",   filtros.modelos.join(","))
+      if (filtros.sexos.length)    p.set("sexo",     filtros.sexos.join(","))
+      if (filtros.cores.length)    p.set("cor",      filtros.cores.join(","))
+      if (filtros.produtos.length) p.set("produto",  filtros.produtos.join(","))
+      if (filtros.ids.trim())      p.set("cod_produto", filtros.ids.split(/[\s,;]+/).filter(Boolean).join(","))
+      const cols = resolverColecoes(filtros, opPorAno)
+      if (cols.length) p.set("colecao", cols.join(","))
+    }
     return p.toString()
-  }, [periodo, filtros, opPorAno])
+  }, [periodo, filtros, opPorAno, aplicarProduto])
 
   useEffect(() => {
     if (!periodo) return
@@ -154,13 +166,29 @@ export default function MetasPage() {
           o versaoBusca para o caso de reaplicar o mesmo recorte. */}
       <FiltroGlobal onBuscar={() => {}} loading={carregando} mostrarSaldo={false} />
 
-      {recorte && (
-        <div style={{ padding: "10px 14px", borderRadius: "8px", border: "1px solid #d97706", background: "var(--surface)", color: "var(--text)", fontSize: "12px", margin: "12px 0 16px", lineHeight: 1.5 }}>
-          <b>Recorte de produto ativo.</b> A meta do Microvix é um valor único por loja e por
-          vendedor — não existe meta por marca, coleção ou modelo. Então o realizado abaixo está
-          recortado, mas o <b>% e a projeção ficam ocultos</b>: comparar uma fatia das vendas com a
-          meta inteira daria um número que parece leitura de desempenho e não é. Use só o filtro de
-          loja para acompanhar meta.
+      {chipsProduto > 0 && (
+        <div style={{ padding: "10px 14px", borderRadius: "8px", border: `1px solid ${recorte ? "#d97706" : "var(--border)"}`, background: "var(--surface)", color: "var(--text)", fontSize: "12px", margin: "12px 0 16px", lineHeight: 1.5, display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: "280px" }}>
+            {recorte ? (
+              <>
+                <b>Mostrando só a fatia do filtro.</b> A meta do Microvix é um valor único por loja
+                e por vendedor — não existe meta por marca, coleção ou modelo. Por isso <b>%, falta
+                e projeção ficam ocultos</b>: comparar uma fatia das vendas com a meta inteira daria
+                um número que parece desempenho e não é.
+              </>
+            ) : (
+              <>
+                Você tem <b>{chipsProduto} filtro{chipsProduto > 1 ? "s" : ""} de produto</b> ativo
+                {chipsProduto > 1 ? "s" : ""} (vindo{chipsProduto > 1 ? "s" : ""} de outra tela).
+                Esta tela está <b>ignorando</b> e mostrando a meta cheia, que é o número que a loja
+                acompanha. O filtro de loja e o de vendedor continuam valendo.
+              </>
+            )}
+          </span>
+          <button onClick={() => setAplicarProduto(v => !v)}
+            style={{ padding: "6px 12px", borderRadius: "8px", border: "1px solid var(--primary)", background: recorte ? "var(--primary)" : "var(--primary-light)", color: recorte ? "#fff" : "var(--primary)", fontSize: "12px", cursor: "pointer", whiteSpace: "nowrap" }}>
+            {recorte ? "Ver meta cheia" : "Aplicar filtro de produto"}
+          </button>
         </div>
       )}
 
