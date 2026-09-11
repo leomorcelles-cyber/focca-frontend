@@ -276,6 +276,9 @@ export default function RelatorioPage() {
   async function exportExcel() {
     const colecoesAlvo = resolverColecoes(filtros, opPorAno)
     const corpo: any = { ...paramsPeriodo }
+    // vendedor: a tela recorta as vendas por ele (montarParams); o Excel tem de
+    // seguir, senao as colunas de venda da planilha nao batem com a tela.
+    if (filtros.vendedores.length) corpo.vendedor = filtros.vendedores.join(",")
     if (filtros.lojas.length)    corpo.loja   = filtros.lojas.join(",")
     if (filtros.marcas.length)   corpo.marca  = filtros.marcas.join(",")
     if (filtros.modelos.length)  corpo.modelo = filtros.modelos.join(",")

@@ -1,6 +1,6 @@
 "use client"
 import { useState, useMemo, useEffect, useRef } from "react"
-import { useFiltros, FiltroState, filtroVazio } from "@/components/FiltroContext"
+import { useFiltros, FiltroState, filtroVazio, estacaoDe } from "@/components/FiltroContext"
 import FiltrosSalvos from "@/components/FiltrosSalvos"
 import { useSelecao } from "@/components/SelecaoContext"
 
@@ -219,18 +219,12 @@ export default function FiltroGlobal({ onBuscar, loading, mostrarSaldo, vendedor
     return cols
   }, [filtros.anos, opPorAno, cascColecoes, filtros.colecoes])
 
-  const estacoesDisp = useMemo(() => {
-    return [...new Set(colsBase.map(c => {
-      const u = c.toUpperCase()
-      if (u.includes("ALTO VERAO") || u.includes("ALTO VERÃO")) return "ALTO VERAO"
-      if (u.includes("INVERNO")) return "INVERNO"
-      if (u.includes("VERAO") || u.includes("VERÃO")) return "VERAO"
-      return "OUTROS"
-    }))]
-  }, [colsBase])
+  // estacaoDe e' a mesma funcao que resolverColecoes usa para montar o recorte:
+  // o chip que a tela oferece e o filtro que ela manda tem de classificar igual.
+  const estacoesDisp = useMemo(() => [...new Set(colsBase.map(estacaoDe))], [colsBase])
 
   const colecoesDisp = useMemo(() => {
-    const filt = filtros.estacoes.length > 0 ? colsBase.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase()))) : colsBase
+    const filt = filtros.estacoes.length > 0 ? colsBase.filter(c => filtros.estacoes.includes(estacaoDe(c))) : colsBase
     const unicas = [...new Set(filt)]
     if (buscaColecao) return unicas.filter(c => c.toLowerCase().includes(buscaColecao.toLowerCase()))
     const sel = unicas.filter(c => filtros.colecoes.includes(c))

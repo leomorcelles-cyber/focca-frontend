@@ -206,6 +206,21 @@ export function useFiltros() {
 // aqui, e as telas so' chamavam esta funcao quando ano E estacao estavam marcados:
 // marcar so' "Inverno" nao filtrava NADA, em tela nenhuma, sem nenhum aviso. Era o
 // filtro global que "nao pegava".
+// Estacao de uma colecao, pelo nome. UMA regra para classificar e para filtrar.
+//
+// Antes a lista de estacoes classificava com prioridade (ALTO VERAO antes de
+// VERAO) mas o filtro usava `nome.includes(estacao)`: marcar VERAO trazia junto
+// as colecoes de ALTO VERAO — que a tela oferece como estacao separada — e
+// deixava de fora "VERÃO" com til. Nas 10 colecoes de 2026, VERAO resolvia 5
+// colecoes quando deveriam ser 4, e nenhuma das duas listas era a certa.
+export function estacaoDe(colecao: string): string {
+  const u = colecao.toUpperCase()
+  if (u.includes("ALTO VERAO") || u.includes("ALTO VERÃO")) return "ALTO VERAO"
+  if (u.includes("INVERNO")) return "INVERNO"
+  if (u.includes("VERAO") || u.includes("VERÃO")) return "VERAO"
+  return "OUTROS"
+}
+
 export function resolverColecoes(filtros: FiltroState, opPorAno: Record<string,string[]>): string[] {
   if (filtros.colecoes.length > 0) return filtros.colecoes
   if (!filtros.anos.length && !filtros.estacoes.length) return []
@@ -214,5 +229,5 @@ export function resolverColecoes(filtros: FiltroState, opPorAno: Record<string,s
     ? filtros.anos.flatMap(a => opPorAno[a] || [])
     : Object.values(opPorAno).flat()
   if (!filtros.estacoes.length) return cols
-  return cols.filter(c => filtros.estacoes.some(e => c.toUpperCase().includes(e.toUpperCase())))
+  return cols.filter(c => filtros.estacoes.includes(estacaoDe(c)))
 }
